@@ -13,6 +13,7 @@ import com.rork.soundbar.data.Ingredient
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
 import com.rork.soundbar.data.SignatureCraft
+import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.ui.theme.Concept
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -66,6 +67,7 @@ data class SoundbarUiState(
     val isSharingAvailable: Boolean = true,
     val playback: Playback? = null,
     val isShaking: Boolean = false,
+    val selectedPlatform: StreamingPlatform = StreamingPlatform.SPOTIFY,
     val stats: TasteStats = TasteStats(0, 0, 0, 0)
 )
 
@@ -94,6 +96,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 signatureId = stored.signatureId,
                 signatureBlend = stored.signatureBlend,
                 guests = stored.guestRecipes,
+                selectedPlatform = StreamingPlatform.fromId(stored.platform),
                 mix = listOf(Ingredient("dreampop", 1), Ingredient("soul", 2))
             )
         }
@@ -231,6 +234,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(concept = it.concept.other) }
         persist()
         refreshSignature()
+    }
+
+    /** Chooses the streaming house that play presses open. */
+    fun setPlatform(platform: StreamingPlatform) {
+        if (_uiState.value.selectedPlatform == platform) return
+        _uiState.update { it.copy(selectedPlatform = platform) }
+        persist()
     }
 
     // endregion
@@ -410,6 +420,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         persist()
         startTicker()
         refreshSignature()
+        launchExternal(blend, trackIndex)
     }
 
     fun togglePlayPause() {
@@ -424,6 +435,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val next = (playback.trackIndex + 1) % blend.tracks.size
         _uiState.update { it.copy(playback = playback.copy(trackIndex = next, positionSeconds = 0, isPlaying = true)) }
         startTicker()
+        launchExternal(blend, next)
     }
 
     fun skipToPrevious() {
@@ -436,6 +448,12 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val previous = if (playback.trackIndex == 0) blend.tracks.lastIndex else playback.trackIndex - 1
         _uiState.update { it.copy(playback = playback.copy(trackIndex = previous, positionSeconds = 0, isPlaying = true)) }
         startTicker()
+        launchExternal(blend, previous)
+    }
+
+    /** Hands the blend to the user's chosen streaming house. */
+    private fun launchExternal(blend: Blend, trackIndex: Int) {
+        _uiState.value.selectedPlatform.launch(getApplication(), blend, trackIndex)
     }
 
     fun stopPlayback() {
@@ -539,6 +557,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 signatureBlend = state.signatureBlend,
                 guestRecipes = state.guests,
                 sharingEnabled = sharingEnabled,
+                platform = state.selectedPlatform.id,
                 seeded = true
             )
         )

@@ -123,6 +123,7 @@ enum class Concept(val id: String) {
             "Pick a base ingredient in the Kitchen to cook something of your own."
         }
     val servedLine: String get() = if (this == BAR) "Served tonight" else "Fresh from the kitchen"
+    val streamingLabel: String get() = if (this == BAR) "Pouring through" else "Playing through"
     val playLabel: String get() = if (this == BAR) "Play the blend" else "Play the dish"
     val pauseLabel: String get() = if (this == BAR) "Pause the blend" else "Pause the dish"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"

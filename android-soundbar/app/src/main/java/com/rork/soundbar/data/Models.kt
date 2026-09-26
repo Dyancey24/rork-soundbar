@@ -82,5 +82,7 @@ data class ShelfState(
     val signatureBlend: Blend? = null,
     val guestRecipes: List<GuestCard> = emptyList(),
     val sharingEnabled: Boolean = false,
+    /** The streaming house play presses open; a StreamingPlatform id. */
+    val platform: String = "spotify",
     val seeded: Boolean = false
 )

@@ -201,6 +201,8 @@ private fun AppShell(
                     onOpenBlend = ::openDish,
                     onPlayBlend = { viewModel.playBlend(it) },
                     onTogglePlay = viewModel::togglePlayPause,
+                    selectedPlatform = state.selectedPlatform,
+                    onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
                     contentPadding = padding
                 )

@@ -19,6 +19,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
+import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.ui.components.ClassicBlendRow
 import com.rork.soundbar.ui.components.CompactBlendCard
 import com.rork.soundbar.ui.components.ConceptToggle
@@ -47,6 +49,8 @@ fun MenuScreen(
     onOpenBlend: (String) -> Unit,
     onPlayBlend: (Blend) -> Unit,
     onTogglePlay: () -> Unit,
+    selectedPlatform: StreamingPlatform,
+    onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
@@ -91,6 +95,15 @@ fun MenuScreen(
                     Spacer(modifier = Modifier.padding(start = 8.dp))
                     ConceptToggle(concept = concept, onToggle = onToggleConcept)
                 }
+            }
+
+            item("platform") {
+                PlatformRow(
+                    label = concept.streamingLabel,
+                    selected = selectedPlatform,
+                    onSelect = onSelectPlatform,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
 
             item("tonight-label") {
@@ -173,6 +186,70 @@ fun BarGlow(modifier: Modifier = Modifier) {
                 )
             )
     )
+}
+
+/** Chooses which streaming house play presses open. */
+@Composable
+private fun PlatformRow(
+    label: String,
+    selected: StreamingPlatform,
+    onSelect: (StreamingPlatform) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f)
+        )
+        StreamingPlatform.entries.forEach { platform ->
+            PlatformPill(
+                platform = platform,
+                isSelected = platform == selected,
+                onClick = { onSelect(platform) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlatformPill(
+    platform: StreamingPlatform,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(50),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        contentColor = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        border = BorderStroke(
+            1.dp,
+            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Text(
+            text = platform.displayName,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+        )
+    }
 }
 
 private fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
