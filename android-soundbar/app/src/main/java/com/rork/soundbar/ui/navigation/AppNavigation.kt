@@ -171,6 +171,7 @@ private fun AppShell(
                                 NowPouringBar(
                                     blend = playingBlend,
                                     track = playingTrack,
+                                    platformName = state.selectedPlatform.displayName,
                                     isPlaying = playback.isPlaying,
                                     progress = playback.positionSeconds.toFloat() /
                                         playingTrack.seconds.coerceAtLeast(1).toFloat(),

@@ -1,6 +1,7 @@
 package com.rork.soundbar.ui
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rork.soundbar.data.Blend
@@ -435,7 +436,6 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val next = (playback.trackIndex + 1) % blend.tracks.size
         _uiState.update { it.copy(playback = playback.copy(trackIndex = next, positionSeconds = 0, isPlaying = true)) }
         startTicker()
-        launchExternal(blend, next)
     }
 
     fun skipToPrevious() {
@@ -448,12 +448,18 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val previous = if (playback.trackIndex == 0) blend.tracks.lastIndex else playback.trackIndex - 1
         _uiState.update { it.copy(playback = playback.copy(trackIndex = previous, positionSeconds = 0, isPlaying = true)) }
         startTicker()
-        launchExternal(blend, previous)
     }
 
-    /** Hands the blend to the user's chosen streaming house. */
+    /**
+     * Hands the blend to the user's chosen streaming house — once per play,
+     * never on skips or pauses, so the platform's own queue carries the music
+     * on without the reader being pulled back and forth. Says where it went.
+     */
     private fun launchExternal(blend: Blend, trackIndex: Int) {
-        _uiState.value.selectedPlatform.launch(getApplication(), blend, trackIndex)
+        val platform = _uiState.value.selectedPlatform
+        platform.launch(getApplication(), blend, trackIndex)
+        val verb = if (_uiState.value.concept == Concept.BAR) "Now pouring in" else "Now playing in"
+        Toast.makeText(getApplication(), "$verb ${platform.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     fun stopPlayback() {

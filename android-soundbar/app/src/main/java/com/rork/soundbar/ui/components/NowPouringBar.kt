@@ -45,6 +45,7 @@ import com.rork.soundbar.data.Track
 fun NowPouringBar(
     blend: Blend,
     track: Track,
+    platformName: String,
     isPlaying: Boolean,
     progress: Float,
     onOpen: () -> Unit,
@@ -101,7 +102,7 @@ fun NowPouringBar(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${track.artist} · ${blend.name}",
+                        text = "$platformName · ${track.artist} · ${blend.name}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         maxLines = 1,
