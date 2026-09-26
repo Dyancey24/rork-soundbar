@@ -1,0 +1,10 @@
+{
+  "apps": [
+    {
+      "name": "Soundbar",
+      "path": "android-soundbar",
+      "framework": "kotlin"
+    }
+  ],
+  "$schema": "https://rork.com/schema/rork.json"
+}
