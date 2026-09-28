@@ -10,4 +10,7 @@ object AuthConfig {
     const val CALLBACK_SCHEME = "rork-wm7dwkmg7ky73dvhk1cpw"
     const val CALLBACK_HOST = "auth"
     const val CALLBACK_PATH = "/callback"
+
+    /** The cloud sync backend (Cloudflare Worker behind EXPO_PUBLIC_RORK_FUNCTIONS_URL). */
+    const val FUNCTIONS_URL = "https://sound-bites-backend.rork.app"
 }

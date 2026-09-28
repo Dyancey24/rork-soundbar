@@ -84,5 +84,7 @@ data class ShelfState(
     val sharingEnabled: Boolean = false,
     /** The streaming house play presses open; a StreamingPlatform id. */
     val platform: String = "spotify",
-    val seeded: Boolean = false
+    val seeded: Boolean = false,
+    /** Millis stamp of the newest write; the cloud keeps the latest. */
+    val updatedAt: Long = 0L
 )

@@ -1,10 +1,15 @@
 {
+  "$schema": "https://rork.com/schema/rork.json",
   "apps": [
     {
       "name": "Soundbar",
       "path": "android-soundbar",
       "framework": "kotlin"
+    },
+    {
+      "name": "Functions",
+      "path": "functions",
+      "framework": "cloudflare"
     }
-  ],
-  "$schema": "https://rork.com/schema/rork.json"
+  ]
 }

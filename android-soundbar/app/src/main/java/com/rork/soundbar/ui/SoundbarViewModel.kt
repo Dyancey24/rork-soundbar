@@ -4,8 +4,11 @@ import android.app.Application
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.rork.soundbar.data.AuthManager
+import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
+import com.rork.soundbar.data.CloudSync
 import com.rork.soundbar.data.Garnish
 import com.rork.soundbar.data.GarnishBar
 import com.rork.soundbar.data.GuestCard
@@ -16,7 +19,10 @@ import com.rork.soundbar.data.ShelfState
 import com.rork.soundbar.data.SignatureCraft
 import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.ui.theme.Concept
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,9 +89,35 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private var noteSaveJob: Job? = null
     private var exchange: GuestExchange? = null
     private var sharingEnabled: Boolean = false
+    private val auth: AuthManager by lazy { AuthManager.get(getApplication()) }
+    private val cloudSync: CloudSync by lazy { CloudSync(auth) }
+    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var syncJob: Job? = null
+    private var hasSynced = false
 
     init {
         val stored = restore()
+        applyStored(stored)
+        _uiState.update {
+            it.copy(mix = listOf(Ingredient("dreampop", 1), Ingredient("soul", 2)))
+        }
+        refreshSignature()
+        startSignature()
+        if (sharingEnabled) setSharing(true)
+
+        // Whenever an account signs in, meet its shelf in the cloud.
+        syncScope.launch {
+            auth.state.collect { signed ->
+                if (signed is AuthState.SignedIn) syncNow()
+            }
+        }
+    }
+
+    /**
+     * Maps a stored shelf onto the house — used for the local file and the
+     * cloud snapshot alike. Playback and sharing are left alone.
+     */
+    private fun applyStored(stored: ShelfState) {
         _uiState.update {
             it.copy(
                 shelf = stored.blends,
@@ -97,16 +129,47 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 signatureId = stored.signatureId,
                 signatureBlend = stored.signatureBlend,
                 guests = stored.guestRecipes,
-                selectedPlatform = StreamingPlatform.fromId(stored.platform),
-                mix = listOf(Ingredient("dreampop", 1), Ingredient("soul", 2))
+                selectedPlatform = StreamingPlatform.fromId(stored.platform)
             )
         }
         mixDays = stored.mixDays
         sharingEnabled = stored.sharingEnabled
         recomputeStats()
-        refreshSignature()
-        startSignature()
-        if (sharingEnabled) setSharing(true)
+    }
+
+    /**
+     * Meets the account's cloud shelf: an empty cloud takes what this device
+     * has, and otherwise the newest write wins. Local saves always keep their
+     * stamp, so a stale snapshot never erases newer work.
+     */
+    private fun syncNow() {
+        syncScope.launch {
+            val snapshot = cloudSync.pull() ?: return@launch
+            val remote = snapshot.state
+            if (remote == null) {
+                cloudSync.push(repository.load())
+                hasSynced = true
+                return@launch
+            }
+            if (snapshot.updatedAt >= repository.load().updatedAt) {
+                repository.save(remote)
+                applyStored(remote)
+                refreshSignature()
+            } else {
+                cloudSync.push(repository.load())
+            }
+            hasSynced = true
+        }
+    }
+
+    /** Debounced cloud push after every local save. */
+    private fun scheduleSync() {
+        if (!hasSynced || auth.state.value !is AuthState.SignedIn) return
+        syncJob?.cancel()
+        syncJob = syncScope.launch {
+            delay(SYNC_DEBOUNCE_MILLIS)
+            cloudSync.push(repository.load())
+        }
     }
 
     /**
@@ -564,9 +627,11 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 guestRecipes = state.guests,
                 sharingEnabled = sharingEnabled,
                 platform = state.selectedPlatform.id,
-                seeded = true
+                seeded = true,
+                updatedAt = System.currentTimeMillis()
             )
         )
+        scheduleSync()
     }
 
     override fun onCleared() {
@@ -583,6 +648,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         const val SHAKE_MILLIS = 850L
         const val NOTE_SAVE_MILLIS = 400L
         const val MAX_GUESTS = 60
+        const val SYNC_DEBOUNCE_MILLIS = 3000L
 
         /** Local calendar day index, kept free of java.time so minSdk 24 stays happy. */
         fun today(): Long {

@@ -15,6 +15,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -184,6 +185,35 @@ class AuthManager private constructor(context: Context) {
                 Log.w(TAG, "Token exchange failed")
                 _state.value = AuthState.Failed("Sign-in couldn't be completed. Please try again.")
             }
+        }
+    }
+
+    /** The current bearer token, if a signed-in session holds one. */
+    fun accessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
+
+    /**
+     * Trades the stored refresh token for a fresh access token when the old
+     * one expired. True when a usable token is back in place.
+     */
+    suspend fun refreshAccessToken(): Boolean {
+        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return false
+        return try {
+            val body = buildJsonObject {
+                put("app_key", AuthConfig.APP_KEY)
+                put("refresh_token", refreshToken)
+            }.toString()
+            val response = http.post("${AuthConfig.AUTH_URL}/oauth/refresh") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+            if (!response.status.isSuccess()) return false
+            val token = Json.parseToJsonElement(response.bodyAsText())
+                .jsonObject.str("access_token") ?: return false
+            prefs.edit().putString(KEY_ACCESS_TOKEN, token).apply()
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "Token refresh failed")
+            false
         }
     }
 
