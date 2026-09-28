@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,6 +62,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rork.soundbar.data.AuthManager
+import com.rork.soundbar.data.AuthState
+import com.rork.soundbar.data.AuthUser
 import com.rork.soundbar.ui.SoundbarViewModel
 import com.rork.soundbar.ui.components.NowPouringBar
 import com.rork.soundbar.ui.components.NowPouringBarHost
@@ -69,6 +73,7 @@ import com.rork.soundbar.ui.screens.DishScreen
 import com.rork.soundbar.ui.screens.MenuScreen
 import com.rork.soundbar.ui.screens.MixScreen
 import com.rork.soundbar.ui.screens.ShelfScreen
+import com.rork.soundbar.ui.screens.SignInScreen
 import com.rork.soundbar.ui.theme.AppTheme
 import com.rork.soundbar.ui.theme.Concept
 import com.rork.soundbar.ui.theme.LocalConcept
@@ -101,6 +106,9 @@ private const val DISH_ROUTE = "dish/{blendId}"
 
 @Composable
 fun AppNavigation() {
+    val appContext = LocalContext.current
+    val auth = remember { AuthManager.get(appContext) }
+    val authState by auth.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val viewModel: SoundbarViewModel = viewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -125,7 +133,18 @@ fun AppNavigation() {
 
     AppTheme(concept = concept) {
         CompositionLocalProvider(LocalConcept provides concept) {
-            AppShell(navController = navController, viewModel = viewModel)
+            // The shelf only opens for a signed-in reader.
+            val account = (authState as? AuthState.SignedIn)?.user
+            if (account == null) {
+                SignInScreen(state = authState, onSignIn = auth::signIn)
+            } else {
+                AppShell(
+                    navController = navController,
+                    viewModel = viewModel,
+                    account = account,
+                    onSignOut = auth::signOut
+                )
+            }
         }
     }
 }
@@ -133,7 +152,9 @@ fun AppNavigation() {
 @Composable
 private fun AppShell(
     navController: NavHostController,
-    viewModel: SoundbarViewModel
+    viewModel: SoundbarViewModel,
+    account: AuthUser,
+    onSignOut: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val concept = state.concept
@@ -205,6 +226,8 @@ private fun AppShell(
                     selectedPlatform = state.selectedPlatform,
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
+                    accountName = account.name,
+                    onSignOut = onSignOut,
                     contentPadding = padding
                 )
             }

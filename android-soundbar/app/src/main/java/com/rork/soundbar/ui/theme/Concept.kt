@@ -124,6 +124,13 @@ enum class Concept(val id: String) {
         }
     val servedLine: String get() = if (this == BAR) "Served tonight" else "Fresh from the kitchen"
     val streamingLabel: String get() = if (this == BAR) "Pouring through" else "Playing through"
+    val authHeadline: String get() = if (this == BAR) "Pull up a chair" else "Tie on the apron"
+    val authBody: String
+        get() = if (this == BAR) {
+            "Create an account or sign in — your shelf, your recipes, and your notes are kept waiting for you."
+        } else {
+            "Create an account or sign in — your pantry, your recipes, and your notes are kept waiting for you."
+        }
     val playLabel: String get() = if (this == BAR) "Play the blend" else "Play the dish"
     val pauseLabel: String get() = if (this == BAR) "Pause the blend" else "Pause the dish"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"

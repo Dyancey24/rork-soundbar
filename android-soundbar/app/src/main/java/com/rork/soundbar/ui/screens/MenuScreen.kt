@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,8 @@ fun MenuScreen(
     selectedPlatform: StreamingPlatform,
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
+    accountName: String,
+    onSignOut: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -167,6 +170,25 @@ fun MenuScreen(
                     fontWeight = FontWeight.Normal,
                     modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
                 )
+            }
+
+            item("account") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Signed in as $accountName",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onSignOut) {
+                        Text(text = "Sign out", fontSize = 12.sp)
+                    }
+                }
             }
         }
     }
