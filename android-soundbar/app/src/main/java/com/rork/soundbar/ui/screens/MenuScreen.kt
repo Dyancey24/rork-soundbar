@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,7 +55,8 @@ fun MenuScreen(
     selectedPlatform: StreamingPlatform,
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
-    accountName: String,
+    accountName: String?,
+    onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
@@ -173,22 +176,77 @@ fun MenuScreen(
             }
 
             item("account") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Signed in as $accountName",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onSignOut) {
-                        Text(text = "Sign out", fontSize = 12.sp)
+                val name = accountName
+                if (name != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Signed in as $name",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onSignOut) {
+                            Text(text = "Sign out", fontSize = 12.sp)
+                        }
                     }
+                } else {
+                    SignInInvitation(onClick = onSignIn)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The standing invitation for guests: a warm, highlighted plaque that nudges
+ * them toward keeping their shelf in the cloud — without ever blocking the fun.
+ */
+@Composable
+private fun SignInInvitation(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val concept = LocalConcept.current
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Text(
+                text = concept.authHeadline,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = concept.authBody,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            Button(
+                onClick = onClick,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                modifier = Modifier
+                    .padding(top = 14.dp)
+                    .fillMaxWidth()
+                    .height(46.dp)
+            ) {
+                Text(
+                    text = "Sign in or create an account",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

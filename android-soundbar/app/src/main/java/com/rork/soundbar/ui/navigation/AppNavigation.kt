@@ -63,6 +63,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rork.soundbar.data.AuthManager
+import com.rork.soundbar.data.AuthProvider
 import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.data.AuthUser
 import com.rork.soundbar.ui.SoundbarViewModel
@@ -133,18 +134,16 @@ fun AppNavigation() {
 
     AppTheme(concept = concept) {
         CompositionLocalProvider(LocalConcept provides concept) {
-            // The shelf only opens for a signed-in reader.
-            val account = (authState as? AuthState.SignedIn)?.user
-            if (account == null) {
-                SignInScreen(state = authState, onSignIn = auth::signIn)
-            } else {
-                AppShell(
-                    navController = navController,
-                    viewModel = viewModel,
-                    account = account,
-                    onSignOut = auth::signOut
-                )
-            }
+            // The house serves every guest right away — signing in is an
+            // invitation from the menu, not a door at the entrance.
+            AppShell(
+                navController = navController,
+                viewModel = viewModel,
+                authState = authState,
+                account = (authState as? AuthState.SignedIn)?.user,
+                onSignIn = auth::signIn,
+                onSignOut = auth::signOut
+            )
         }
     }
 }
@@ -153,7 +152,9 @@ fun AppNavigation() {
 private fun AppShell(
     navController: NavHostController,
     viewModel: SoundbarViewModel,
-    account: AuthUser,
+    authState: AuthState,
+    account: AuthUser?,
+    onSignIn: (AuthProvider) -> Unit,
     onSignOut: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -226,9 +227,21 @@ private fun AppShell(
                     selectedPlatform = state.selectedPlatform,
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
-                    accountName = account.name,
+                    accountName = account?.name,
+                    onSignIn = { navController.navigate("signin") },
                     onSignOut = onSignOut,
                     contentPadding = padding
+                )
+            }
+            composable("signin") {
+                // Back to the menu the moment the account is through the door.
+                LaunchedEffect(authState) {
+                    if (authState is AuthState.SignedIn) navController.popBackStack()
+                }
+                SignInScreen(
+                    state = authState,
+                    onSignIn = onSignIn,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable("mix") {

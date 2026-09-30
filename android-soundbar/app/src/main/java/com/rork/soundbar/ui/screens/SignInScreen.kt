@@ -16,6 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,13 +29,15 @@ import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.ui.theme.LocalConcept
 
 /**
- * The door. Before the shelf opens, the reader signs in or creates an account —
- * the house keeps their shelf, recipes, and notes waiting for them.
+ * The door, opened from the menu's invitation. The guest signs in or creates
+ * an account so the house keeps their shelf, recipes, and notes waiting —
+ * but they are free to browse, mix, and pour without ever knocking.
  */
 @Composable
 fun SignInScreen(
     state: AuthState,
     onSignIn: (AuthProvider) -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
@@ -49,6 +52,14 @@ fun SignInScreen(
                 .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (onBack != null) {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.align(Alignment.Start)
+                ) {
+                    Text(text = "Back", fontSize = 14.sp)
+                }
+            }
             Spacer(modifier = Modifier.weight(1.1f))
             Text(
                 text = "Soundbar",
