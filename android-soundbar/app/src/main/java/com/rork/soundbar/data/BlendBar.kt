@@ -13,23 +13,23 @@ import kotlin.random.Random
 object BlendBar {
 
     object Art {
-        const val SMOKY = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/77c35f95-10be-46d3-85d6-076113b119be.png"
-        const val BITTER = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/be601653-a209-4f86-bb6c-f5920a5920ce.png"
-        const val TIRAMISU = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/59a94f8c-7bb8-4e9b-be08-83e22f44cb11.png"
-        const val ESPRESSO = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/65357430-2153-427b-b238-df2a26fc11b6.png"
-        const val MARTINI = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/6f93ecdc-d5fa-4cca-88ee-92611e2f2a80.png"
-        const val CARAMEL = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/236d7c2b-8539-4e6d-a612-f053d81c9331.png"
-        const val PEACH = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/0977a76f-9876-4e0f-a790-2f2386633d26.png"
-        const val HOUSE_SPECIAL = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/68d6c567-fb7c-4de6-aebd-0dc8e2b1f816.png"
+        const val SMOKY = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/77c35f95-10be-46d3-85d6-076113b119be.png"
+        const val BITTER = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/be601653-a209-4f86-bb6c-f5920a5920ce.png"
+        const val TIRAMISU = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/59a94f8c-7bb8-4e9b-be08-83e22f44cb11.png"
+        const val ESPRESSO = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/65357430-2153-427b-b238-df2a26fc11b6.png"
+        const val MARTINI = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/6f93ecdc-d5fa-4cca-88ee-92611e2f2a80.png"
+        const val CARAMEL = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/236d7c2b-8539-4e6d-a612-f053d81c9331.png"
+        const val PEACH = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/0977a76f-9876-4e0f-a790-2f2386633d26.png"
+        const val HOUSE_SPECIAL = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/68d6c567-fb7c-4de6-aebd-0dc8e2b1f816.png"
 
-        const val K_PIZZA = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/b2662829-c027-4982-ba32-263c6d62b517.png"
-        const val K_RADICCHIO = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/933870aa-d041-491b-a7b7-f0f9272e6723.png"
-        const val K_TIRAMISU = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/5bf28121-bdff-415b-a9d3-a15dd83b6309.png"
-        const val K_AFFOGATO = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/514f6ff4-7633-4d59-bc60-560d6554e653.png"
-        const val K_CEVICHE = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/2ff8f8af-3676-476e-9674-390faf5b5690.png"
-        const val K_TART = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/54d491b7-5ad0-4e9d-bce5-a2ad79a385e3.png"
-        const val K_GALETTE = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/cdae3adf-0710-4a89-a491-d18cf84fa410.png"
-        const val K_PASTA = "https://r2-pub.rork.com/projects/wm7dwkmg7ky73dvhk1cpw/assets/3972c8eb-9ac1-466c-8149-684687b4362a.png"
+        const val K_PIZZA = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/b2662829-c027-4982-ba32-263c6d62b517.png"
+        const val K_RADICCHIO = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/933870aa-d041-491b-a7b7-f0f9272e6723.png"
+        const val K_TIRAMISU = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/5bf28121-bdff-415b-a9d3-a15dd83b6309.png"
+        const val K_AFFOGATO = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/514f6ff4-7633-4d59-bc60-560d6554e653.png"
+        const val K_CEVICHE = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/2ff8f8af-3676-476e-9674-390faf5b5690.png"
+        const val K_TART = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/54d491b7-5ad0-4e9d-bce5-a2ad79a385e3.png"
+        const val K_GALETTE = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/cdae3adf-0710-4a89-a491-d18cf84fa410.png"
+        const val K_PASTA = "https://wm7dwkmg7ky73dvhk1cpw.rork.app/~assets/img/3972c8eb-9ac1-466c-8149-684687b4362a.png"
 
         val barPool: List<String> = listOf(SMOKY, BITTER, TIRAMISU, ESPRESSO, MARTINI, CARAMEL, PEACH, HOUSE_SPECIAL)
         val kitchenPool: List<String> = listOf(K_PIZZA, K_RADICCHIO, K_TIRAMISU, K_AFFOGATO, K_CEVICHE, K_TART, K_GALETTE, K_PASTA)

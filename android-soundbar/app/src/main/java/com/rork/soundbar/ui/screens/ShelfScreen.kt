@@ -42,9 +42,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +85,7 @@ private enum class StatDetail { GENRES, HOURS, STREAK }
  * The personal collection, staged like the back bar: most-played blends sit on
  * the top shelf, the rest line up on wooden planks below.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShelfScreen(
     shelf: List<Blend>,
@@ -91,6 +94,8 @@ fun ShelfScreen(
     onOpenBlend: (String) -> Unit,
     onStartMixing: () -> Unit,
     onToggleConcept: () -> Unit,
+    isSyncing: Boolean,
+    onRefresh: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -105,6 +110,11 @@ fun ShelfScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         BarGlow()
+        PullToRefreshBox(
+            isRefreshing = isSyncing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
+        ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -180,6 +190,7 @@ fun ShelfScreen(
                     }
                 )
             }
+        }
         }
     }
 }

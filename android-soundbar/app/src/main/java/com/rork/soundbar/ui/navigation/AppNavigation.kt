@@ -252,6 +252,8 @@ private fun AppShell(
                     onOpenBlend = ::openDish,
                     onStartMixing = { navController.navigate("mix") },
                     onToggleConcept = viewModel::toggleConcept,
+                    isSyncing = state.isSyncing,
+                    onRefresh = viewModel::refreshFromCloud,
                     contentPadding = padding
                 )
             }

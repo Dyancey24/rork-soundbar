@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.TimeZone
 
 /** What the simulated bar player is currently pouring through the speakers. */
@@ -75,8 +76,12 @@ data class SoundbarUiState(
     val playback: Playback? = null,
     val isShaking: Boolean = false,
     val selectedPlatform: StreamingPlatform = StreamingPlatform.SPOTIFY,
-    val stats: TasteStats = TasteStats(0, 0, 0, 0)
+    val stats: TasteStats = TasteStats(0, 0, 0, 0),
+    val isSyncing: Boolean = false
 )
+
+/** How a cloud meeting ended, so a manual refresh can tell the reader what happened. */
+private enum class SyncResult { APPLIED, CURRENT, FAILED }
 
 class SoundbarViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -144,21 +149,50 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
      */
     private fun syncNow() {
         syncScope.launch {
-            val snapshot = cloudSync.pull() ?: return@launch
-            val remote = snapshot.state
-            if (remote == null) {
-                cloudSync.push(repository.load())
-                hasSynced = true
-                return@launch
-            }
-            if (snapshot.updatedAt >= repository.load().updatedAt) {
-                repository.save(remote)
-                applyStored(remote)
-                refreshSignature()
-            } else {
-                cloudSync.push(repository.load())
-            }
+            meetCloud()
             hasSynced = true
+        }
+    }
+
+    /** The shared pull/merge/push core behind sign-in sync and manual refresh. */
+    private suspend fun meetCloud(): SyncResult {
+        val snapshot = cloudSync.pull() ?: return SyncResult.FAILED
+        val remote = snapshot.state
+        if (remote == null) {
+            cloudSync.push(repository.load())
+            return SyncResult.CURRENT
+        }
+        return if (snapshot.updatedAt >= repository.load().updatedAt) {
+            repository.save(remote)
+            applyStored(remote)
+            refreshSignature()
+            SyncResult.APPLIED
+        } else {
+            SyncResult.CURRENT
+        }
+    }
+
+    /**
+     * Manual pull-to-refresh: fetches the account's cloud shelf right now and
+     * tells the reader what came of it.
+     */
+    fun refreshFromCloud() {
+        if (_uiState.value.isSyncing) return
+        if (auth.state.value !is AuthState.SignedIn) return
+        _uiState.update { it.copy(isSyncing = true) }
+        syncScope.launch {
+            val outcome = meetCloud()
+            hasSynced = true
+            _uiState.update { it.copy(isSyncing = false) }
+            withContext(Dispatchers.Main) {
+                val concept = _uiState.value.concept
+                val message = when (outcome) {
+                    SyncResult.APPLIED -> concept.syncUpdatedMessage
+                    SyncResult.CURRENT -> concept.syncCurrentMessage
+                    SyncResult.FAILED -> concept.syncFailedMessage
+                }
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

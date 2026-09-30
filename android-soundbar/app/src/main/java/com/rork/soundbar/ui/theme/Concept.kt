@@ -125,6 +125,12 @@ enum class Concept(val id: String) {
     val servedLine: String get() = if (this == BAR) "Served tonight" else "Fresh from the kitchen"
     val streamingLabel: String get() = if (this == BAR) "Pouring through" else "Playing through"
     val authHeadline: String get() = if (this == BAR) "Pull up a chair" else "Tie on the apron"
+    val syncUpdatedMessage: String
+        get() = if (this == BAR) "Poured in from the cloud — shelf refreshed." else "Fresh from the cloud — pantry restocked."
+    val syncCurrentMessage: String
+        get() = if (this == BAR) "Your shelf already matches the cloud." else "Your pantry already matches the cloud."
+    val syncFailedMessage: String
+        get() = "Couldn't reach the cloud — try again shortly."
     val authBody: String
         get() = if (this == BAR) {
             "Create an account or sign in — your shelf, your recipes, and your notes are kept waiting for you."
