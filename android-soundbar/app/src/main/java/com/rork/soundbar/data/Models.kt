@@ -89,6 +89,10 @@ data class ShelfState(
     val listenedTracks: Set<String> = emptySet(),
     val completedAlbums: Set<String> = emptySet(),
     val genreBadges: Set<String> = emptySet(),
+    /** Credited songs per genre — drives each badge's level. */
+    val genreSongs: Map<String, Int> = emptyMap(),
+    /** Limited, exclusive event badges — ids from Rewards. */
+    val eventBadges: Set<String> = emptySet(),
     val seeded: Boolean = false,
     /** Millis stamp of the newest write; the cloud keeps the latest. */
     val updatedAt: Long = 0L

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,6 +55,8 @@ fun AccountScreen(
     accountEmail: String?,
     points: Long,
     genreBadges: Set<String>,
+    genreSongs: Map<String, Int>,
+    eventBadges: Set<String>,
     songsHeard: Int,
     albumsCompleted: Int,
     selectedPlatform: StreamingPlatform,
@@ -108,13 +112,21 @@ fun AccountScreen(
                 RewardsCard(
                     points = points,
                     genreBadges = genreBadges,
+                    genreSongs = genreSongs,
+                    eventBadges = eventBadges,
                     songsHeard = songsHeard,
                     albumsCompleted = albumsCompleted
                 )
             }
 
             item("badges") {
-                BadgeGrid(earned = genreBadges)
+                BadgeGrid(earned = genreBadges, songsByGenre = genreSongs)
+            }
+
+            if (eventBadges.contains(Rewards.FOUNDER_BADGE) || Rewards.isFounderWindowOpen()) {
+                item("founder") {
+                    FounderCard(isEarned = eventBadges.contains(Rewards.FOUNDER_BADGE))
+                }
             }
 
             item("settings-label") {
@@ -195,12 +207,15 @@ private fun AccountCard(
 private fun RewardsCard(
     points: Long,
     genreBadges: Set<String>,
+    genreSongs: Map<String, Int>,
+    eventBadges: Set<String>,
     songsHeard: Int,
     albumsCompleted: Int,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
-    val multiplier = Rewards.multiplier(genreBadges.size)
+    val genreLevels = Rewards.totalLevels(genreBadges, genreSongs)
+    val multiplier = Rewards.multiplier(genreLevels, eventBadges.size * Rewards.EVENT_BADGE_BONUS)
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -230,7 +245,7 @@ private fun RewardsCard(
                     modifier = Modifier.padding(start = 10.dp)
                 ) {
                     Text(
-                        text = String.format(Locale.US, "×%.1f", multiplier),
+                        text = String.format(Locale.US, "×%.2f", multiplier),
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
@@ -255,7 +270,8 @@ private fun RewardsCard(
             HairlineDivider(modifier = Modifier.padding(top = 12.dp))
             RewardRow(label = "Songs heard", value = songsHeard.toString(), note = "+${Rewards.SONG_POINTS} pts each")
             RewardRow(label = "Albums finished", value = albumsCompleted.toString(), note = "+${Rewards.ALBUM_POINTS} pts each")
-            RewardRow(label = concept.badgesTitle, value = genreBadges.size.toString(), note = "+10% each")
+            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "+1.25% a level")
+            RewardRow(label = concept.eventBadgesTitle, value = eventBadges.size.toString(), note = "+25% each")
             Text(
                 text = concept.rewardsExplainer,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -297,7 +313,7 @@ private fun RewardRow(label: String, value: String, note: String, modifier: Modi
 
 /** Every genre in the house, one badge each; earned badges glow in their own liquid colour. */
 @Composable
-private fun BadgeGrid(earned: Set<String>, modifier: Modifier = Modifier) {
+private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modifier: Modifier = Modifier) {
     val concept = LocalConcept.current
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -313,7 +329,7 @@ private fun BadgeGrid(earned: Set<String>, modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${earned.size} of ${GenreCatalog.all.size} · each badge adds +10% to every payout",
+                text = "${earned.size} of ${GenreCatalog.all.size} badges · ${Rewards.totalLevels(earned, songsByGenre)} levels · each level +1.25%",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)
@@ -329,6 +345,7 @@ private fun BadgeGrid(earned: Set<String>, modifier: Modifier = Modifier) {
                         BadgeTile(
                             genre = genre,
                             isEarned = earned.contains(genre.id),
+                            level = maxOf(1, Rewards.level(songsByGenre[genre.id] ?: 0)),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -340,7 +357,7 @@ private fun BadgeGrid(earned: Set<String>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BadgeTile(genre: Genre, isEarned: Boolean, modifier: Modifier = Modifier) {
+private fun BadgeTile(genre: Genre, isEarned: Boolean, level: Int, modifier: Modifier = Modifier) {
     val concept = LocalConcept.current
     val tileAlpha = if (isEarned) 1f else 0.35f
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -372,13 +389,94 @@ private fun BadgeTile(genre: Genre, isEarned: Boolean, modifier: Modifier = Modi
                 .padding(top = 4.dp)
                 .alpha(tileAlpha)
         )
-        if (!isEarned) {
+        if (isEarned) {
+            Text(
+                text = "Lv $level",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        } else {
             Text(
                 text = concept.badgeLocked,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 9.sp,
                 modifier = Modifier.alpha(tileAlpha)
             )
+        }
+    }
+}
+
+/**
+ * The limited event badge: minted for the house's earliest guests during the
+ * launch window, kept forever, and worth a flat bonus on top of the genre board.
+ */
+@Composable
+private fun FounderCard(isEarned: Boolean, modifier: Modifier = Modifier) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = if (isEarned) concept.founderTitle else null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = concept.founderTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = concept.founderDescription,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (isEarned) MaterialTheme.colorScheme.primary else Color.Transparent,
+                border = if (isEarned) {
+                    null
+                } else {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                },
+                modifier = Modifier.padding(start = 10.dp)
+            ) {
+                Text(
+                    text = if (isEarned) concept.founderEarnedLabel else concept.founderBonusLabel,
+                    color = if (isEarned) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
         }
     }
 }

@@ -163,7 +163,23 @@ enum class Concept(val id: String) {
     val settingsTitle: String get() = "Settings"
     val themeSettingLabel: String get() = if (this == BAR) "Bar or kitchen" else "Kitchen or bar"
     val rewardsExplainer: String
-        get() = "10 points a song · 25 points an album · +10% a badge"
+        get() = "10 points a song · 25 points an album · boost ×1.5 → ×5"
+    val eventBadgesTitle: String get() = "Event badges"
+    val founderTitle: String get() = "Founder badge"
+    val founderDescription: String
+        get() = if (this == BAR) {
+            "For the first guests behind the bar — earned in the opening three months after launch."
+        } else {
+            "For the first guests in the kitchen — earned in the opening three months after launch."
+        }
+    val founderEarnedLabel: String get() = "Yours forever"
+    val founderBonusLabel: String get() = "+25% boost"
+    val founderEarnedMessage: String
+        get() = if (this == BAR) {
+            "Founder badge earned — the bar will remember you."
+        } else {
+            "Founder badge earned — the kitchen will remember you."
+        }
 
     fun badgeEarnedMessage(genre: String): String =
         if (this == BAR) {

@@ -302,6 +302,8 @@ private fun AppShell(
                     accountEmail = account?.email,
                     points = state.points,
                     genreBadges = state.genreBadges,
+                    genreSongs = state.genreSongs,
+                    eventBadges = state.eventBadges,
                     songsHeard = state.listenedTracks.size,
                     albumsCompleted = state.completedAlbums.size,
                     selectedPlatform = state.selectedPlatform,

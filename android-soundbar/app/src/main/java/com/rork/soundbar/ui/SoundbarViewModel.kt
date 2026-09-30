@@ -80,11 +80,13 @@ data class SoundbarUiState(
     val selectedPlatform: StreamingPlatform = StreamingPlatform.SPOTIFY,
     val stats: TasteStats = TasteStats(0, 0, 0, 0),
     val isSyncing: Boolean = false,
-    /** Rewards ledger: total points, and the genre badges that lift every payout. */
+    /** Rewards ledger: total points, badges with levels, and limited event badges. */
     val points: Long = 0L,
     val listenedTracks: Set<String> = emptySet(),
     val completedAlbums: Set<String> = emptySet(),
-    val genreBadges: Set<String> = emptySet()
+    val genreBadges: Set<String> = emptySet(),
+    val genreSongs: Map<String, Int> = emptyMap(),
+    val eventBadges: Set<String> = emptySet()
 )
 
 /** How a cloud meeting ended, so a manual refresh can tell the reader what happened. */
@@ -145,7 +147,9 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 points = stored.points,
                 listenedTracks = stored.listenedTracks,
                 completedAlbums = stored.completedAlbums,
-                genreBadges = stored.genreBadges
+                genreBadges = stored.genreBadges,
+                genreSongs = stored.genreSongs,
+                eventBadges = stored.eventBadges
             )
         }
         mixDays = stored.mixDays
@@ -615,9 +619,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Pays the listening ledger: a song pays once it has been heard past the
-     * credit line, an album pays when its last unheard song is heard, and the
-     * blend's genres mint badges the first time they are heard — every badge
-     * lifts the multiplier for all payouts that follow.
+     * credit line, its genre's badge gains a song toward its next level, an
+     * album pays when its last unheard song is heard, and guests whose first
+     * credited song lands inside the launch window mint the founder badge.
+     * Every badge level lifts the multiplier for the payouts that follow.
      */
     private fun creditListening(blendId: String, trackIndex: Int, blend: Blend, position: Int) {
         val track = blend.tracks.getOrNull(trackIndex) ?: return
@@ -626,29 +631,49 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val state = _uiState.value
         if (state.listenedTracks.contains(key)) return
         val listenedTracks = state.listenedTracks + key
-        val freshBadgeIds = (blend.genreIds + blend.garnishes.map { it.genreId })
-            .distinct()
-            .filterNot { state.genreBadges.contains(it) }
-        val badges = state.genreBadges + freshBadgeIds
-        var points = state.points + Rewards.payout(Rewards.SONG_POINTS, badges.size)
+
+        // The song's own genre counts toward its badge; the badge itself is
+        // minted the first time the genre is heard.
+        val genreId = track.genreId
+        val isNewBadge = genreId !in state.genreBadges
+        val genreBadges = if (isNewBadge) state.genreBadges + genreId else state.genreBadges
+        val genreSongs = state.genreSongs + (genreId to (state.genreSongs[genreId] ?: 0) + 1)
+
+        // The founder badge is limited: only guests whose first credited song
+        // lands inside the launch window ever hold it.
+        var eventBadges = state.eventBadges
+        var founderMinted = false
+        if (Rewards.FOUNDER_BADGE !in eventBadges && Rewards.isFounderWindowOpen()) {
+            eventBadges = eventBadges + Rewards.FOUNDER_BADGE
+            founderMinted = true
+        }
+
+        val genreLevels = Rewards.totalLevels(genreBadges, genreSongs)
+        val multiplier = Rewards.multiplier(genreLevels, eventBadges.size * Rewards.EVENT_BADGE_BONUS)
+        var points = state.points + Rewards.payout(Rewards.SONG_POINTS, multiplier)
         var completedAlbums = state.completedAlbums
         if (!completedAlbums.contains(blendId) &&
             blend.tracks.indices.all { listenedTracks.contains("$blendId:$it") }
         ) {
             completedAlbums = completedAlbums + blendId
-            points += Rewards.payout(Rewards.ALBUM_POINTS, badges.size)
+            points += Rewards.payout(Rewards.ALBUM_POINTS, multiplier)
         }
         _uiState.update {
             it.copy(
                 points = points,
                 listenedTracks = listenedTracks,
                 completedAlbums = completedAlbums,
-                genreBadges = badges
+                genreBadges = genreBadges,
+                genreSongs = genreSongs,
+                eventBadges = eventBadges
             )
         }
         val concept = _uiState.value.concept
-        freshBadgeIds.forEach { genreId ->
+        if (isNewBadge) {
             Toast.makeText(getApplication(), concept.badgeEarnedMessage(GenreCatalog.name(genreId)), Toast.LENGTH_SHORT).show()
+        }
+        if (founderMinted) {
+            Toast.makeText(getApplication(), concept.founderEarnedMessage, Toast.LENGTH_SHORT).show()
         }
         persist()
         recomputeStats()
@@ -718,6 +743,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 listenedTracks = state.listenedTracks,
                 completedAlbums = state.completedAlbums,
                 genreBadges = state.genreBadges,
+                genreSongs = state.genreSongs,
+                eventBadges = state.eventBadges,
                 seeded = true,
                 updatedAt = System.currentTimeMillis()
             )
