@@ -148,6 +148,30 @@ enum class Concept(val id: String) {
     val mixTab: String get() = if (this == BAR) "Mix" else "Cook"
     val shelfTab: String get() = if (this == BAR) "Shelf" else "Pantry"
 
+    /** The account desk: tab, title, and the rewards ledger's vocabulary. */
+    val accountTab: String get() = if (this == BAR) "Members" else "Household"
+    val accountTitle: String get() = if (this == BAR) "The Members' Desk" else "The Household Ledger"
+    val rewardsTitle: String get() = if (this == BAR) "House Rewards" else "Kitchen Merits"
+    val rewardsTagline: String
+        get() = if (this == BAR) {
+            "Listen around the house — every badge sweetens the pour."
+        } else {
+            "Taste around the kitchen — every badge sweetens the pot."
+        }
+    val badgesTitle: String get() = if (this == BAR) "Genre badges" else "Flavor badges"
+    val badgeLocked: String get() = "Locked"
+    val settingsTitle: String get() = "Settings"
+    val themeSettingLabel: String get() = if (this == BAR) "Bar or kitchen" else "Kitchen or bar"
+    val rewardsExplainer: String
+        get() = "10 points a song · 25 points an album · +10% a badge"
+
+    fun badgeEarnedMessage(genre: String): String =
+        if (this == BAR) {
+            "New badge: $genre — every pour now earns more."
+        } else {
+            "New badge: $genre — every dish now earns more."
+        }
+
     fun shelfCount(count: Int): String =
         if (this == BAR) "$count blends on the shelf" else "$count dishes in the pantry"
 

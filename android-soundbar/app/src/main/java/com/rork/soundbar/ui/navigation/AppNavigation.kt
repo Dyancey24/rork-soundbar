@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Liquor
 import androidx.compose.material.icons.filled.LocalBar
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.SoupKitchen
 import androidx.compose.material.icons.outlined.AutoStories
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.Kitchen
 import androidx.compose.material.icons.outlined.Liquor
 import androidx.compose.material.icons.outlined.LocalBar
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.SoupKitchen
 import androidx.compose.material3.Button
@@ -69,6 +71,7 @@ import com.rork.soundbar.data.AuthUser
 import com.rork.soundbar.ui.SoundbarViewModel
 import com.rork.soundbar.ui.components.NowPouringBar
 import com.rork.soundbar.ui.components.NowPouringBarHost
+import com.rork.soundbar.ui.screens.AccountScreen
 import com.rork.soundbar.ui.screens.CookbookScreen
 import com.rork.soundbar.ui.screens.DishScreen
 import com.rork.soundbar.ui.screens.MenuScreen
@@ -92,14 +95,16 @@ private fun tabsFor(concept: Concept): List<TabSpec> = if (concept == Concept.KI
         TabSpec("menu", concept.menuTab, Icons.Outlined.Restaurant, Icons.Filled.Restaurant),
         TabSpec("mix", concept.mixTab, Icons.Outlined.SoupKitchen, Icons.Filled.SoupKitchen),
         TabSpec("shelf", concept.shelfTab, Icons.Outlined.Kitchen, Icons.Filled.Kitchen),
-        TabSpec("cookbook", concept.cookbookTab, Icons.Outlined.MenuBook, Icons.Filled.MenuBook)
+        TabSpec("cookbook", concept.cookbookTab, Icons.Outlined.MenuBook, Icons.Filled.MenuBook),
+        TabSpec("account", concept.accountTab, Icons.Outlined.Person, Icons.Filled.Person)
     )
 } else {
     listOf(
         TabSpec("menu", concept.menuTab, Icons.Outlined.LocalBar, Icons.Filled.LocalBar),
         TabSpec("mix", concept.mixTab, Icons.Outlined.Blender, Icons.Filled.Blender),
         TabSpec("shelf", concept.shelfTab, Icons.Outlined.Liquor, Icons.Filled.Liquor),
-        TabSpec("cookbook", concept.cookbookTab, Icons.Outlined.AutoStories, Icons.Filled.AutoStories)
+        TabSpec("cookbook", concept.cookbookTab, Icons.Outlined.AutoStories, Icons.Filled.AutoStories),
+        TabSpec("account", concept.accountTab, Icons.Outlined.Person, Icons.Filled.Person)
     )
 }
 
@@ -228,8 +233,7 @@ private fun AppShell(
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
                     accountName = account?.name,
-                    onSignIn = { navController.navigate("signin") },
-                    onSignOut = onSignOut,
+                    onOpenAccount = { navController.navigate("account") },
                     contentPadding = padding
                 )
             }
@@ -288,6 +292,26 @@ private fun AppShell(
                     onUpdateNote = viewModel::updateNote,
                     onStartMixing = { navController.navigate("mix") },
                     onToggleConcept = viewModel::toggleConcept,
+                    contentPadding = padding
+                )
+            }
+            composable("account") {
+                AccountScreen(
+                    signedIn = account != null,
+                    accountName = account?.name,
+                    accountEmail = account?.email,
+                    points = state.points,
+                    genreBadges = state.genreBadges,
+                    songsHeard = state.listenedTracks.size,
+                    albumsCompleted = state.completedAlbums.size,
+                    selectedPlatform = state.selectedPlatform,
+                    onSelectPlatform = viewModel::setPlatform,
+                    onToggleConcept = viewModel::toggleConcept,
+                    isSharing = state.isSharing,
+                    isSharingAvailable = state.isSharingAvailable,
+                    onSetSharing = viewModel::setSharing,
+                    onSignIn = { navController.navigate("signin") },
+                    onSignOut = onSignOut,
                     contentPadding = padding
                 )
             }

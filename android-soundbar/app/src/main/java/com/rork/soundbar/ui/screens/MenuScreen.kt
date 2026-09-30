@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,8 +55,7 @@ fun MenuScreen(
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
     accountName: String?,
-    onSignIn: () -> Unit,
-    onSignOut: () -> Unit,
+    onOpenAccount: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -175,27 +173,9 @@ fun MenuScreen(
                 )
             }
 
-            item("account") {
-                val name = accountName
-                if (name != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 2.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Signed in as $name",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = onSignOut) {
-                            Text(text = "Sign out", fontSize = 12.sp)
-                        }
-                    }
-                } else {
-                    SignInInvitation(onClick = onSignIn)
+            if (accountName == null) {
+                item("account") {
+                    SignInInvitation(onClick = onOpenAccount)
                 }
             }
         }
@@ -207,7 +187,7 @@ fun MenuScreen(
  * them toward keeping their shelf in the cloud — without ever blocking the fun.
  */
 @Composable
-private fun SignInInvitation(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun SignInInvitation(onClick: () -> Unit, modifier: Modifier = Modifier) {
     val concept = LocalConcept.current
     Surface(
         onClick = onClick,
@@ -270,7 +250,7 @@ fun BarGlow(modifier: Modifier = Modifier) {
 
 /** Chooses which streaming house play presses open. */
 @Composable
-private fun PlatformRow(
+fun PlatformRow(
     label: String,
     selected: StreamingPlatform,
     onSelect: (StreamingPlatform) -> Unit,

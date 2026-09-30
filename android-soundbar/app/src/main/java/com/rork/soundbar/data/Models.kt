@@ -84,6 +84,11 @@ data class ShelfState(
     val sharingEnabled: Boolean = false,
     /** The streaming house play presses open; a StreamingPlatform id. */
     val platform: String = "spotify",
+    /** Rewards ledger: points earned, songs heard, albums finished, genre badges minted. */
+    val points: Long = 0L,
+    val listenedTracks: Set<String> = emptySet(),
+    val completedAlbums: Set<String> = emptySet(),
+    val genreBadges: Set<String> = emptySet(),
     val seeded: Boolean = false,
     /** Millis stamp of the newest write; the cloud keeps the latest. */
     val updatedAt: Long = 0L

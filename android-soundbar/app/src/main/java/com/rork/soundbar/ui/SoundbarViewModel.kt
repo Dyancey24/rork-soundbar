@@ -11,9 +11,11 @@ import com.rork.soundbar.data.BlendBar
 import com.rork.soundbar.data.CloudSync
 import com.rork.soundbar.data.Garnish
 import com.rork.soundbar.data.GarnishBar
+import com.rork.soundbar.data.GenreCatalog
 import com.rork.soundbar.data.GuestCard
 import com.rork.soundbar.data.GuestExchange
 import com.rork.soundbar.data.Ingredient
+import com.rork.soundbar.data.Rewards
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
 import com.rork.soundbar.data.SignatureCraft
@@ -77,7 +79,12 @@ data class SoundbarUiState(
     val isShaking: Boolean = false,
     val selectedPlatform: StreamingPlatform = StreamingPlatform.SPOTIFY,
     val stats: TasteStats = TasteStats(0, 0, 0, 0),
-    val isSyncing: Boolean = false
+    val isSyncing: Boolean = false,
+    /** Rewards ledger: total points, and the genre badges that lift every payout. */
+    val points: Long = 0L,
+    val listenedTracks: Set<String> = emptySet(),
+    val completedAlbums: Set<String> = emptySet(),
+    val genreBadges: Set<String> = emptySet()
 )
 
 /** How a cloud meeting ended, so a manual refresh can tell the reader what happened. */
@@ -134,7 +141,11 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 signatureId = stored.signatureId,
                 signatureBlend = stored.signatureBlend,
                 guests = stored.guestRecipes,
-                selectedPlatform = StreamingPlatform.fromId(stored.platform)
+                selectedPlatform = StreamingPlatform.fromId(stored.platform),
+                points = stored.points,
+                listenedTracks = stored.listenedTracks,
+                completedAlbums = stored.completedAlbums,
+                genreBadges = stored.genreBadges
             )
         }
         mixDays = stored.mixDays
@@ -593,12 +604,54 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                         )
                     }
                 }
+                creditListening(playback.blendId, playback.trackIndex, blend, position)
                 if (position % 30 == 0) {
                     persist()
                     recomputeStats()
                 }
             }
         }
+    }
+
+    /**
+     * Pays the listening ledger: a song pays once it has been heard past the
+     * credit line, an album pays when its last unheard song is heard, and the
+     * blend's genres mint badges the first time they are heard — every badge
+     * lifts the multiplier for all payouts that follow.
+     */
+    private fun creditListening(blendId: String, trackIndex: Int, blend: Blend, position: Int) {
+        val track = blend.tracks.getOrNull(trackIndex) ?: return
+        if (position < Rewards.SONG_CREDIT_SECONDS && position < track.seconds) return
+        val key = "$blendId:$trackIndex"
+        val state = _uiState.value
+        if (state.listenedTracks.contains(key)) return
+        val listenedTracks = state.listenedTracks + key
+        val freshBadgeIds = (blend.genreIds + blend.garnishes.map { it.genreId })
+            .distinct()
+            .filterNot { state.genreBadges.contains(it) }
+        val badges = state.genreBadges + freshBadgeIds
+        var points = state.points + Rewards.payout(Rewards.SONG_POINTS, badges.size)
+        var completedAlbums = state.completedAlbums
+        if (!completedAlbums.contains(blendId) &&
+            blend.tracks.indices.all { listenedTracks.contains("$blendId:$it") }
+        ) {
+            completedAlbums = completedAlbums + blendId
+            points += Rewards.payout(Rewards.ALBUM_POINTS, badges.size)
+        }
+        _uiState.update {
+            it.copy(
+                points = points,
+                listenedTracks = listenedTracks,
+                completedAlbums = completedAlbums,
+                genreBadges = badges
+            )
+        }
+        val concept = _uiState.value.concept
+        freshBadgeIds.forEach { genreId ->
+            Toast.makeText(getApplication(), concept.badgeEarnedMessage(GenreCatalog.name(genreId)), Toast.LENGTH_SHORT).show()
+        }
+        persist()
+        recomputeStats()
     }
 
     // endregion
@@ -661,6 +714,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 guestRecipes = state.guests,
                 sharingEnabled = sharingEnabled,
                 platform = state.selectedPlatform.id,
+                points = state.points,
+                listenedTracks = state.listenedTracks,
+                completedAlbums = state.completedAlbums,
+                genreBadges = state.genreBadges,
                 seeded = true,
                 updatedAt = System.currentTimeMillis()
             )
