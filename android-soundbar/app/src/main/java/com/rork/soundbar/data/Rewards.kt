@@ -22,8 +22,14 @@ object Rewards {
     /** Genre badges climb to this level and no further. */
     const val MAX_LEVEL = 10
 
-    /** Credited songs of a genre needed per level after the first. */
+    /** Credited songs of a genre needed for the first level-up. */
     const val SONGS_PER_LEVEL = 5
+
+    /**
+     * Every level-up asks this many songs more than the one before, so a
+     * badge's early levels come quickly and its last levels are earned.
+     */
+    const val LEVEL_GROWTH = 1
 
     /** The multiplier floor — the smallest boost the board ever offers. */
     const val MIN_MULTIPLIER = 1.5
@@ -50,9 +56,20 @@ object Rewards {
     /** Last moment the founder badge can still be earned — three months after launch. */
     val founderDeadlineMillis: Long = LAUNCH_MILLIS + 92L * 86_400_000L
 
+    /** Credited songs of a genre required to stand at [level] (level 1 costs only its first song). */
+    fun songsForLevel(level: Int): Int {
+        if (level <= 1) return 0
+        val steps = minOf(level, MAX_LEVEL) - 1
+        return steps * SONGS_PER_LEVEL + LEVEL_GROWTH * steps * (steps - 1) / 2
+    }
+
     /** The badge level a genre sits at after [songs] credited songs of it. */
-    fun level(songs: Int): Int =
-        if (songs <= 0) 0 else minOf(MAX_LEVEL, 1 + songs / SONGS_PER_LEVEL)
+    fun level(songs: Int): Int {
+        if (songs <= 0) return 0
+        var current = 1
+        while (current < MAX_LEVEL && songs >= songsForLevel(current + 1)) current++
+        return current
+    }
 
     /**
      * How full a badge's progress ring is, 0..1, on its way to the next level.
@@ -62,8 +79,9 @@ object Rewards {
         val current = level(songs)
         if (current <= 0) return 0f
         if (current >= MAX_LEVEL) return 1f
-        val intoLevel = songs - (current - 1) * SONGS_PER_LEVEL
-        return (intoLevel.toFloat() / SONGS_PER_LEVEL).coerceIn(0f, 1f)
+        val span = songsForLevel(current + 1) - songsForLevel(current)
+        val intoLevel = songs - songsForLevel(current)
+        return (intoLevel.toFloat() / span).coerceIn(0f, 1f)
     }
 
     /**
