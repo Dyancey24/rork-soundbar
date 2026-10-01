@@ -278,7 +278,7 @@ private fun RewardsCard(
             HairlineDivider(modifier = Modifier.padding(top = 12.dp))
             RewardRow(label = "Songs heard", value = songsHeard.toString(), note = "+${Rewards.SONG_POINTS} pts each")
             RewardRow(label = "Albums finished", value = albumsCompleted.toString(), note = "+${Rewards.ALBUM_POINTS} pts each")
-            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "+2% a level · +16% past Lv 5")
+            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "up to ×25 a badge")
             RewardRow(label = concept.eventBadgesTitle, value = eventBadges.size.toString(), note = "+25% each · founder ×50")
             Text(
                 text = concept.rewardsExplainer,
@@ -337,7 +337,7 @@ private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modif
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${earned.size} of ${GenreCatalog.all.size} badges · levels add up to ×25",
+                text = "${earned.size} of ${GenreCatalog.all.size} badges · each badge climbs to ×25",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)
