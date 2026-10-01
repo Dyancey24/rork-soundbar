@@ -1,6 +1,9 @@
 package com.rork.soundbar.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,10 +28,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -346,6 +354,7 @@ private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modif
                             genre = genre,
                             isEarned = earned.contains(genre.id),
                             level = maxOf(1, Rewards.level(songsByGenre[genre.id] ?: 0)),
+                            progress = Rewards.levelProgress(songsByGenre[genre.id] ?: 0),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -357,26 +366,70 @@ private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modif
 }
 
 @Composable
-private fun BadgeTile(genre: Genre, isEarned: Boolean, level: Int, modifier: Modifier = Modifier) {
+private fun BadgeTile(
+    genre: Genre,
+    isEarned: Boolean,
+    level: Int,
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
     val concept = LocalConcept.current
     val tileAlpha = if (isEarned) 1f else 0.35f
+    val ringFill by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 600),
+        label = "badgeRingFill"
+    )
+    val trackColor = MaterialTheme.colorScheme.outlineVariant
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            shape = CircleShape,
-            color = genre.liquid,
-            border = BorderStroke(
-                1.dp,
-                if (isEarned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-            ),
-            modifier = Modifier.size(46.dp).alpha(tileAlpha)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(54.dp).alpha(tileAlpha)
         ) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                Icon(
-                    imageVector = GenreCatalog.icon(genre.id),
-                    contentDescription = if (isEarned) genre.name else null,
-                    tint = if (isEarned) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
+            // The ring: a quiet track with the genre's own liquid colour filling
+            // around it as the next level draws near.
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val stroke = 3.dp.toPx()
+                val topLeft = Offset(stroke / 2, stroke / 2)
+                val arcSize = Size(size.width - stroke, size.height - stroke)
+                drawArc(
+                    color = trackColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round)
                 )
+                if (ringFill > 0f) {
+                    drawArc(
+                        color = genre.liquid,
+                        startAngle = -90f,
+                        sweepAngle = 360f * ringFill,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round)
+                    )
+                }
+            }
+            Surface(
+                shape = CircleShape,
+                color = genre.liquid,
+                border = BorderStroke(
+                    1.dp,
+                    if (isEarned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = GenreCatalog.icon(genre.id),
+                        contentDescription = if (isEarned) genre.name else null,
+                        tint = if (isEarned) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
         Text(
@@ -391,7 +444,7 @@ private fun BadgeTile(genre: Genre, isEarned: Boolean, level: Int, modifier: Mod
         )
         if (isEarned) {
             Text(
-                text = "Lv $level",
+                text = if (level >= Rewards.MAX_LEVEL) "Lv $level · max" else "Lv $level",
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.SemiBold

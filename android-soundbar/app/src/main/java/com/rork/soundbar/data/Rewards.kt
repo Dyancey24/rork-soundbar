@@ -55,6 +55,18 @@ object Rewards {
         if (songs <= 0) 0 else minOf(MAX_LEVEL, 1 + songs / SONGS_PER_LEVEL)
 
     /**
+     * How full a badge's progress ring is, 0..1, on its way to the next level.
+     * A locked badge sits empty; a maxed badge reads as a complete circle.
+     */
+    fun levelProgress(songs: Int): Float {
+        val current = level(songs)
+        if (current <= 0) return 0f
+        if (current >= MAX_LEVEL) return 1f
+        val intoLevel = songs - (current - 1) * SONGS_PER_LEVEL
+        return (intoLevel.toFloat() / SONGS_PER_LEVEL).coerceIn(0f, 1f)
+    }
+
+    /**
      * Total genre-badge levels in force: every earned badge counts as at least
      * level one, and further levels come from the credited songs of its genre.
      */
