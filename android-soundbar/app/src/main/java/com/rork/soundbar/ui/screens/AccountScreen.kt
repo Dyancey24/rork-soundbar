@@ -223,7 +223,7 @@ private fun RewardsCard(
 ) {
     val concept = LocalConcept.current
     val genreLevels = Rewards.totalLevels(genreBadges, genreSongs)
-    val multiplier = Rewards.multiplier(genreLevels, eventBadges.size * Rewards.EVENT_BADGE_BONUS)
+    val multiplier = Rewards.multiplier(genreBadges, genreSongs, eventBadges)
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -278,8 +278,8 @@ private fun RewardsCard(
             HairlineDivider(modifier = Modifier.padding(top = 12.dp))
             RewardRow(label = "Songs heard", value = songsHeard.toString(), note = "+${Rewards.SONG_POINTS} pts each")
             RewardRow(label = "Albums finished", value = albumsCompleted.toString(), note = "+${Rewards.ALBUM_POINTS} pts each")
-            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "+1.25% a level")
-            RewardRow(label = concept.eventBadgesTitle, value = eventBadges.size.toString(), note = "+25% each")
+            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "+2% a level · +16% past Lv 5")
+            RewardRow(label = concept.eventBadgesTitle, value = eventBadges.size.toString(), note = "+25% each · founder ×50")
             Text(
                 text = concept.rewardsExplainer,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -337,7 +337,7 @@ private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modif
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${earned.size} of ${GenreCatalog.all.size} badges · ${Rewards.totalLevels(earned, songsByGenre)} levels · each level +1.25%",
+                text = "${earned.size} of ${GenreCatalog.all.size} badges · levels add up to ×25",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)

@@ -4,9 +4,11 @@ import java.util.Calendar
 
 /**
  * The rewards ledger's arithmetic: songs and albums pay points, and genre
- * badges climb ten levels each, every level lifting the payout multiplier a
- * step. The boost is floored at x1.5 and hard-capped at x5.0 so the large
- * badge board stays balanced; limited event badges pay a flat bonus on top.
+ * badges climb ten levels each — 1000 credited songs to max a badge — with
+ * early levels coming quickly and the deep levels saved for the devoted.
+ * Every level lifts the payout multiplier, the steps growing past level 5.
+ * The boost is floored at x1.5 and capped at x25.0; holding the founder badge
+ * raises the ceiling to x50.0.
  */
 object Rewards {
 
@@ -22,25 +24,35 @@ object Rewards {
     /** Genre badges climb to this level and no further. */
     const val MAX_LEVEL = 10
 
-    /** Credited songs of a genre needed for the first level-up. */
-    const val SONGS_PER_LEVEL = 5
+    /** Credited songs of one genre it takes to max a badge. */
+    const val MAX_LEVEL_SONGS = 1000
 
     /**
-     * Every level-up asks this many songs more than the one before, so a
-     * badge's early levels come quickly and its last levels are earned.
+     * Credited songs of one genre required to stand at each level, indexed by
+     * level: quick gains early (a level-up every few songs), then real stretch
+     * after level 5 so the last levels stay worth chasing. Level 10 = 1000.
      */
-    const val LEVEL_GROWTH = 1
+    private val LEVEL_SONGS = intArrayOf(0, 1, 10, 25, 50, 100, 200, 350, 550, 750, 1000)
 
     /** The multiplier floor — the smallest boost the board ever offers. */
     const val MIN_MULTIPLIER = 1.5
 
-    /** The multiplier cap — no collection, however full, boosts past this. */
-    const val MAX_MULTIPLIER = 5.0
+    /** The genre-board cap — no collection, however full, boosts past this. */
+    const val MAX_MULTIPLIER = 25.0
 
-    /** The multiplier step each genre-badge level adds. */
-    const val LEVEL_STEP = 0.0125
+    /** The multiplier step each badge level from 2 to 5 adds. */
+    const val EARLY_LEVEL_STEP = 0.02
 
-    /** The flat bonus every event badge pays, on top of the genre board. */
+    /** The larger multiplier step each badge level past 5 adds. */
+    const val LATE_LEVEL_STEP = 0.16
+
+    /** The flat bonus the founder badge adds, on top of the genre board. */
+    const val FOUNDER_BADGE_BONUS = 25.0
+
+    /** While the founder badge is held, the payout ceiling rises to this. */
+    const val FOUNDER_MAX_MULTIPLIER = 50.0
+
+    /** The flat bonus every ordinary event badge pays, on top of the genre board. */
     const val EVENT_BADGE_BONUS = 0.25
 
     /** The one event badge live at launch — for early adopters only. */
@@ -57,17 +69,14 @@ object Rewards {
     val founderDeadlineMillis: Long = LAUNCH_MILLIS + 92L * 86_400_000L
 
     /** Credited songs of a genre required to stand at [level] (level 1 costs only its first song). */
-    fun songsForLevel(level: Int): Int {
-        if (level <= 1) return 0
-        val steps = minOf(level, MAX_LEVEL) - 1
-        return steps * SONGS_PER_LEVEL + LEVEL_GROWTH * steps * (steps - 1) / 2
-    }
+    fun songsForLevel(level: Int): Int =
+        LEVEL_SONGS[level.coerceIn(0, MAX_LEVEL)]
 
     /** The badge level a genre sits at after [songs] credited songs of it. */
     fun level(songs: Int): Int {
         if (songs <= 0) return 0
-        var current = 1
-        while (current < MAX_LEVEL && songs >= songsForLevel(current + 1)) current++
+        var current = MAX_LEVEL
+        while (current > 1 && songs < songsForLevel(current)) current--
         return current
     }
 
@@ -79,10 +88,26 @@ object Rewards {
         val current = level(songs)
         if (current <= 0) return 0f
         if (current >= MAX_LEVEL) return 1f
-        val span = songsForLevel(current + 1) - songsForLevel(current)
-        val intoLevel = songs - songsForLevel(current)
-        return (intoLevel.toFloat() / span).coerceIn(0f, 1f)
+        val start = songsForLevel(current)
+        val span = songsForLevel(current + 1) - start
+        return ((songs - start).toFloat() / span).coerceIn(0f, 1f)
     }
+
+    /**
+     * The multiplier one badge at [level] contributes: small steps through the
+     * early levels, then the larger late steps past level 5. A maxed badge is
+     * worth +0.88.
+     */
+    fun badgeBonus(level: Int): Double {
+        if (level <= 1) return 0.0
+        val early = minOf(level, 5) - 1
+        val late = (level - 5).coerceIn(0, MAX_LEVEL - 5)
+        return early * EARLY_LEVEL_STEP + late * LATE_LEVEL_STEP
+    }
+
+    /** The summed bonus of every earned badge at its current level. */
+    fun totalBonus(earnedBadges: Set<String>, songsByGenre: Map<String, Int>): Double =
+        earnedBadges.sumOf { badge -> badgeBonus(maxOf(1, level(songsByGenre[badge] ?: 0))) }
 
     /**
      * Total genre-badge levels in force: every earned badge counts as at least
@@ -91,9 +116,22 @@ object Rewards {
     fun totalLevels(earnedBadges: Set<String>, songsByGenre: Map<String, Int>): Int =
         earnedBadges.sumOf { badge -> maxOf(1, level(songsByGenre[badge] ?: 0)) }
 
-    /** The payout multiplier for [genreLevels] badge levels and [eventBonus] event bonuses. */
-    fun multiplier(genreLevels: Int, eventBonus: Double = 0.0): Double =
-        minOf(MAX_MULTIPLIER, MIN_MULTIPLIER + genreLevels * LEVEL_STEP + eventBonus)
+    /**
+     * The payout multiplier in force: the badge board's summed bonus, the
+     * ordinary event badges' flat bonuses, and the founder badge's large bonus
+     * — which also lifts the ceiling, to x50 while it is held.
+     */
+    fun multiplier(
+        earnedBadges: Set<String>,
+        songsByGenre: Map<String, Int>,
+        eventBadges: Set<String>
+    ): Double {
+        val founderHeld = eventBadges.contains(FOUNDER_BADGE)
+        val eventBonus = eventBadges.count { it != FOUNDER_BADGE } * EVENT_BADGE_BONUS
+        val founderBonus = if (founderHeld) FOUNDER_BADGE_BONUS else 0.0
+        val cap = if (founderHeld) FOUNDER_MAX_MULTIPLIER else MAX_MULTIPLIER
+        return minOf(cap, MIN_MULTIPLIER + totalBonus(earnedBadges, songsByGenre) + eventBonus + founderBonus)
+    }
 
     /** A base payout run through [multiplier], rounded to whole points. */
     fun payout(basePoints: Int, multiplier: Double): Long = Math.round(basePoints * multiplier)

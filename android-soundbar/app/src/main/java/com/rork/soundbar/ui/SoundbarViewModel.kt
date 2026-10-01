@@ -648,8 +648,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
             founderMinted = true
         }
 
-        val genreLevels = Rewards.totalLevels(genreBadges, genreSongs)
-        val multiplier = Rewards.multiplier(genreLevels, eventBadges.size * Rewards.EVENT_BADGE_BONUS)
+        val multiplier = Rewards.multiplier(genreBadges, genreSongs, eventBadges)
         var points = state.points + Rewards.payout(Rewards.SONG_POINTS, multiplier)
         var completedAlbums = state.completedAlbums
         if (!completedAlbums.contains(blendId) &&
