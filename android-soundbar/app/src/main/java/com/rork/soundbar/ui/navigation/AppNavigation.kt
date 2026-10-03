@@ -340,6 +340,7 @@ private fun AppShell(
                 ProfileScreen(
                     profile = state.profile,
                     onUpdate = viewModel::updateProfile,
+                    onShuffleAlias = viewModel::regenerateAlias,
                     onBack = { navController.popBackStack() },
                     contentPadding = padding
                 )

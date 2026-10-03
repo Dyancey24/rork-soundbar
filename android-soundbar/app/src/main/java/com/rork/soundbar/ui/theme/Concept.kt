@@ -239,6 +239,27 @@ enum class Concept(val id: String) {
         get() = if (this == BAR) "Public — your name rides the pass" else "Public — your name rides the counter"
     val profilePublicOffTag: String get() = "Private — only the playlist travels"
 
+    /** The anonymous-pass option: shown once the profile is public. */
+    val profilePassTitle: String get() = "Anonymous passes"
+    val profilePassOnHint: String
+        get() = if (this == BAR) {
+            "Your pours still travel, but without your name or mark attached."
+        } else {
+            "Your specials still travel, but without your name or mark attached."
+        }
+    val profilePassOffHint: String
+        get() = if (this == BAR) {
+            "Guests who catch your pour see your name and mark."
+        } else {
+            "Guests who catch your special see your name and mark."
+        }
+
+    /** The house-dealt board name, shown until the reader sets a username. */
+    val profileAliasLabel: String get() = "On the leaderboard"
+    val profileAliasHint: String
+        get() = "The house dealt you a name — you'll play under it until you choose your own."
+    val profileAliasShuffle: String get() = "Deal a new name"
+
     fun guestFromLabel(name: String): String = "From $name"
 
     fun badgeEarnedMessage(genre: String): String =

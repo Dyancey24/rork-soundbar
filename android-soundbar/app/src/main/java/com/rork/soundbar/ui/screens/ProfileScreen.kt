@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -54,12 +55,14 @@ private const val USERNAME_MAX = 24
 /**
  * The profile desk: a username, an avatar mark drawn from the house's
  * catalogue, and the public opt-in. Everything is local until the opt-in is
- * on — then the name and mark ride the walk-by playlist and the leaderboard.
+ * on — then the name and mark ride the walk-by playlist and the leaderboard,
+ * unless anonymous passes are switched on.
  */
 @Composable
 fun ProfileScreen(
     profile: Profile,
-    onUpdate: (String, Avatar?, Boolean) -> Unit,
+    onUpdate: (String, Avatar?, Boolean, Boolean) -> Unit,
+    onShuffleAlias: () -> Unit,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
@@ -72,9 +75,15 @@ fun ProfileScreen(
     var username by remember { mutableStateOf(profile.username) }
     var avatar by remember { mutableStateOf(profile.avatar) }
     var isPublic by remember { mutableStateOf(profile.isPublic) }
+    var anonymousPass by remember { mutableStateOf(profile.anonymousPass) }
 
-    fun apply(nextName: String = username, nextAvatar: Avatar? = avatar, nextPublic: Boolean = isPublic) {
-        onUpdate(nextName, nextAvatar, nextPublic)
+    fun apply(
+        nextName: String = username,
+        nextAvatar: Avatar? = avatar,
+        nextPublic: Boolean = isPublic,
+        nextAnonymous: Boolean = anonymousPass
+    ) {
+        onUpdate(nextName, nextAvatar, nextPublic, nextAnonymous)
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -118,10 +127,12 @@ fun ProfileScreen(
                 IdentityCard(
                     username = username,
                     avatar = avatar,
+                    boardAlias = profile.boardAlias,
                     onNameChange = { value ->
                         username = value
                         apply(nextName = value)
-                    }
+                    },
+                    onShuffle = onShuffleAlias
                 )
             }
 
@@ -153,6 +164,20 @@ fun ProfileScreen(
                 )
             }
 
+            // The anonymous-pass escape hatch only exists once the profile is
+            // public — a private reader's passes are already anonymous.
+            if (isPublic) {
+                item("pass") {
+                    PassCard(
+                        anonymousPass = anonymousPass,
+                        onToggle = { next ->
+                            anonymousPass = next
+                            apply(nextAnonymous = next)
+                        }
+                    )
+                }
+            }
+
             item("footnote") {
                 Text(
                     text = concept.profileFootnote,
@@ -171,7 +196,9 @@ fun ProfileScreen(
 private fun IdentityCard(
     username: String,
     avatar: Avatar?,
+    boardAlias: String,
     onNameChange: (String) -> Unit,
+    onShuffle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
@@ -214,6 +241,44 @@ private fun IdentityCard(
                     .fillMaxWidth()
                     .padding(top = 14.dp)
             )
+            // Until a username is chosen, the board calls the reader by the
+            // house-dealt alias — reshufflable with one tap.
+            if (username.isBlank() && boardAlias.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = concept.profileAliasLabel,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            text = boardAlias,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    IconButton(onClick = onShuffle) {
+                        Icon(
+                            imageVector = Icons.Outlined.Shuffle,
+                            contentDescription = concept.profileAliasShuffle,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Text(
+                    text = concept.profileAliasHint,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
         }
     }
 }
@@ -380,7 +445,6 @@ private fun PublicCard(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val concept = LocalConcept.current
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -400,6 +464,7 @@ private fun PublicCard(
         ),
         modifier = modifier.fillMaxWidth()
     ) {
+        val concept = LocalConcept.current
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(16.dp)
@@ -429,6 +494,65 @@ private fun PublicCard(
             }
             Switch(
                 checked = isPublic,
+                onCheckedChange = onToggle,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+    }
+}
+
+/** The escape hatch: ride the pass, but leave the name at the door. */
+@Composable
+private fun PassCard(
+    anonymousPass: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (anonymousPass) {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (anonymousPass) {
+                MaterialTheme.colorScheme.outlineVariant
+            } else {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+            }
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = concept.profilePassTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (anonymousPass) {
+                        concept.profilePassOnHint
+                    } else {
+                        concept.profilePassOffHint
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(
+                checked = anonymousPass,
                 onCheckedChange = onToggle,
                 modifier = Modifier.padding(start = 12.dp)
             )

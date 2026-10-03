@@ -21,6 +21,7 @@ import com.rork.soundbar.data.LeaderboardData
 import com.rork.soundbar.data.LeaderboardSync
 import com.rork.soundbar.data.Profile
 import com.rork.soundbar.data.Rewards
+import com.rork.soundbar.data.randomAlias
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
 import com.rork.soundbar.data.SignatureCraft
@@ -124,6 +125,12 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     init {
         val stored = restore()
         applyStored(stored)
+        // Deal a board name once, on first run — the leaderboard always has
+        // something to call this reader before they pick a username.
+        if (_uiState.value.profile.boardAlias.isBlank()) {
+            _uiState.update { it.copy(profile = it.profile.copy(boardAlias = randomAlias())) }
+            persist()
+        }
         _uiState.update {
             it.copy(mix = listOf(Ingredient("dreampop", 1), Ingredient("soul", 2)))
         }
@@ -294,17 +301,14 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         syncScope.launch { leaderboardSync.pushScore(points, name, boardAvatar()) }
     }
 
-    private fun currentAccountName(): String? =
-        (auth.state.value as? AuthState.SignedIn)?.user?.name
-
     /**
-     * The name the board shows: the chosen username once the profile is
-     * public, otherwise the account's own name.
+     * The name the board shows: the chosen username, otherwise the house-dealt
+     * alias — the account's own name never leaves the device for the board.
      */
     private fun boardName(): String? {
+        if (auth.state.value !is AuthState.SignedIn) return null
         val profile = _uiState.value.profile
-        if (profile.isPublic && profile.username.isNotBlank()) return profile.username
-        return currentAccountName()
+        return profile.username.ifBlank { profile.boardAlias }.ifBlank { null }
     }
 
     /** The mark the board shows — only when the profile is public. */
@@ -320,20 +324,44 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
      * away, the pass updates what it advertises, and the cloud board follows
      * on a short debounce so typing never spams it.
      */
-    fun updateProfile(username: String, avatar: Avatar?, isPublic: Boolean) {
+    fun updateProfile(username: String, avatar: Avatar?, isPublic: Boolean, anonymousPass: Boolean) {
         val cleaned = username.trim().replace(Regex("\\s+"), " ").take(MAX_USERNAME)
-        _uiState.update { it.copy(profile = Profile(cleaned, avatar, isPublic)) }
+        _uiState.update {
+            it.copy(
+                profile = it.profile.copy(
+                    username = cleaned,
+                    avatar = avatar,
+                    isPublic = isPublic,
+                    anonymousPass = anonymousPass
+                )
+            )
+        }
         persist()
         exchange?.setSender(publicSenderName(), publicSenderAvatar())
         scheduleProfilePush()
     }
 
-    /** The identity riding the pass; null unless the profile is public. */
+    /** Deals a fresh board name for a reader who hasn't chosen a username. */
+    fun regenerateAlias() {
+        if (_uiState.value.profile.username.isNotBlank()) return
+        _uiState.update { it.copy(profile = it.profile.copy(boardAlias = randomAlias())) }
+        persist()
+        scheduleProfilePush()
+    }
+
+    /**
+     * The identity riding the pass: name and mark only when the profile is
+     * public AND anonymous passes are off — otherwise the playlist travels
+     * alone, exactly as a private reader's does.
+     */
     private fun publicSenderName(): String? =
-        _uiState.value.profile.takeIf { it.isPublic }?.username?.takeIf { it.isNotBlank() }
+        _uiState.value.profile
+            .takeIf { it.isPublic && !it.anonymousPass }
+            ?.username
+            ?.takeIf { it.isNotBlank() }
 
     private fun publicSenderAvatar(): Avatar? =
-        _uiState.value.profile.takeIf { it.isPublic }?.avatar
+        _uiState.value.profile.takeIf { it.isPublic && !it.anonymousPass }?.avatar
 
     private fun scheduleProfilePush() {
         if (auth.state.value !is AuthState.SignedIn) return

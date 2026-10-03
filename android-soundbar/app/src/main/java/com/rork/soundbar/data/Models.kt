@@ -99,14 +99,34 @@ data class Avatar(
  * The reader's public-facing self: a chosen username and avatar mark, plus the
  * opt-in switch. Everything here stays on the device unless [Profile.isPublic]
  * is on — only then do the name and mark ride the walk-by playlist and the
- * friends leaderboard.
+ * friends leaderboard. [anonymousPass] keeps the walk-by anonymous even while
+ * public; [boardAlias] is the house-dealt name the leaderboard shows until the
+ * reader picks their own username.
  */
 @Serializable
 data class Profile(
     val username: String = "",
     val avatar: Avatar? = null,
-    val isPublic: Boolean = false
+    val isPublic: Boolean = false,
+    val anonymousPass: Boolean = false,
+    val boardAlias: String = ""
 )
+
+private val ALIAS_ADJECTIVES = listOf(
+    "Velvet", "Midnight", "Amber", "Hollow", "Copper", "Dusty",
+    "Electric", "Quiet", "Golden", "Static", "Lunar", "Paper",
+    "Crimson", "Restless", "Neon", "Wandering"
+)
+
+private val ALIAS_NOUNS = listOf(
+    "Echo", "Vinyl", "Reverb", "Cadence", "Groove", "Chorus",
+    "Relay", "Turntable", "Encore", "Tempo", "Serenade", "Refrain",
+    "Whistle", "Jukebox", "Harmonic", "Riff"
+)
+
+/** Deals a board name like "Velvet Echo" — shown until the reader picks their own. */
+fun randomAlias(): String =
+    "${ALIAS_ADJECTIVES.random()} ${ALIAS_NOUNS.random()}"
 
 /** Persisted shelf state so a user's collection survives app restarts. */
 @Serializable
