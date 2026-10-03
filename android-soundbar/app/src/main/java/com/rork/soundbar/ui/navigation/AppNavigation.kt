@@ -74,6 +74,7 @@ import com.rork.soundbar.ui.components.NowPouringBarHost
 import com.rork.soundbar.ui.screens.AccountScreen
 import com.rork.soundbar.ui.screens.CookbookScreen
 import com.rork.soundbar.ui.screens.DishScreen
+import com.rork.soundbar.ui.screens.LeaderboardScreen
 import com.rork.soundbar.ui.screens.MenuScreen
 import com.rork.soundbar.ui.screens.MixScreen
 import com.rork.soundbar.ui.screens.ShelfScreen
@@ -314,6 +315,21 @@ private fun AppShell(
                     onSetSharing = viewModel::setSharing,
                     onSignIn = { navController.navigate("signin") },
                     onSignOut = onSignOut,
+                    onOpenLeaderboard = { navController.navigate("leaderboard") },
+                    contentPadding = padding
+                )
+            }
+            composable("leaderboard") {
+                LeaderboardScreen(
+                    signedIn = account != null,
+                    points = state.points,
+                    leaderboard = state.leaderboard,
+                    isLoading = state.isLeaderboardLoading,
+                    onRefresh = viewModel::loadLeaderboard,
+                    onAddFriend = viewModel::addFriend,
+                    onRemoveFriend = viewModel::removeFriend,
+                    onBack = { navController.popBackStack() },
+                    onSignIn = { navController.navigate("signin") },
                     contentPadding = padding
                 )
             }

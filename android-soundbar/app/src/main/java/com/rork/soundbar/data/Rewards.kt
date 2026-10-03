@@ -6,9 +6,9 @@ import java.util.Calendar
  * The rewards ledger's arithmetic: songs and albums pay points, and genre
  * badges climb ten levels each — 1000 credited songs from level 1 to level
  * 10 — with early levels coming quickly and the deep levels saved for the
- * devoted. A badge's boost grows with its listening progress up to x25.0
- * (2500%) when maxed, every earned badge's bonus stacks on a x1.5 floor,
- * and the founder badge is scaled to match at x50.0.
+ * devoted. A badge's boost grows with its listening progress up to x10.0
+ * (1000%) when maxed, every earned badge's bonus stacks on a x1.5 floor,
+ * and the founder badge sits above the genre maximum at x50.0.
  */
 object Rewards {
 
@@ -37,10 +37,10 @@ object Rewards {
     /** The multiplier floor — the smallest boost the board ever offers. */
     const val MIN_MULTIPLIER = 1.5
 
-    /** The total boost a genre badge offers at level 10 — 2500%. */
-    const val GENRE_BADGE_MAX_BONUS = 25.0
+    /** The total boost a genre badge offers at level 10 — 1000%. */
+    const val GENRE_BADGE_MAX_BONUS = 10.0
 
-    /** The founder badge's boost, scaled to sit above the genre maximum. */
+    /** The founder badge's boost — the largest single prize in the house. */
     const val FOUNDER_BADGE_BONUS = 50.0
 
     /** The flat bonus every ordinary event badge pays, on top of the genre board. */

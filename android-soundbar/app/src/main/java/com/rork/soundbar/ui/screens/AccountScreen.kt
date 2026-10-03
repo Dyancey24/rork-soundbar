@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,6 +78,7 @@ fun AccountScreen(
     onSetSharing: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onOpenLeaderboard: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -135,6 +139,10 @@ fun AccountScreen(
                 item("founder") {
                     FounderCard(isEarned = eventBadges.contains(Rewards.FOUNDER_BADGE))
                 }
+            }
+
+            item("leaderboard") {
+                LeaderboardCard(onOpen = onOpenLeaderboard)
             }
 
             item("settings-label") {
@@ -278,7 +286,7 @@ private fun RewardsCard(
             HairlineDivider(modifier = Modifier.padding(top = 12.dp))
             RewardRow(label = "Songs heard", value = songsHeard.toString(), note = "+${Rewards.SONG_POINTS} pts each")
             RewardRow(label = "Albums finished", value = albumsCompleted.toString(), note = "+${Rewards.ALBUM_POINTS} pts each")
-            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "up to ×25 a badge")
+            RewardRow(label = concept.badgesTitle, value = "$genreLevels lv", note = "up to ×10 a badge")
             RewardRow(label = concept.eventBadgesTitle, value = eventBadges.size.toString(), note = "+25% each · founder ×50")
             Text(
                 text = concept.rewardsExplainer,
@@ -337,7 +345,7 @@ private fun BadgeGrid(earned: Set<String>, songsByGenre: Map<String, Int>, modif
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${earned.size} of ${GenreCatalog.all.size} badges · each badge climbs to ×25",
+                text = "${earned.size} of ${GenreCatalog.all.size} badges · each badge climbs to ×10",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)
@@ -530,6 +538,60 @@ private fun FounderCard(isEarned: Boolean, modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 )
             }
+        }
+    }
+}
+
+/** The doorway to the friends leaderboard. */
+@Composable
+private fun LeaderboardCard(onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Filled.EmojiEvents,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = concept.leaderboardTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = concept.leaderboardTagline,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = concept.leaderboardTitle,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
     }
 }

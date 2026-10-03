@@ -5,8 +5,12 @@
 // bearer token and stamps X-Rork-User-Id; without it, requests are guests and
 // get a 401. Writes are last-write-wins on a millisecond stamp.
 // Cloud sync v1: GET/PUT /shelf, one snapshot per account.
+// Leaderboard v1: a global DO holds players (with friend codes), friendships,
+// and ratcheting scores for the friends leaderboard.
 
 import { DurableObject } from "cloudflare:workers";
+
+export { Leaderboard } from "./leaderboard";
 
 type Env = { DO: Fetcher };
 
@@ -46,6 +50,16 @@ export default {
 
     if (url.pathname === "/ping") {
       return Response.json({ ok: true, now: new Date().toISOString() });
+    }
+
+    if (url.pathname.startsWith("/leaderboard")) {
+      if (!userId) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+      const wrapped = new Request(request.url, request);
+      wrapped.headers.set("X-Rork-DO-Class", "Leaderboard");
+      wrapped.headers.set("X-Rork-DO-Id", "global:leaderboard");
+      return env.DO.fetch(wrapped);
     }
 
     if (url.pathname !== "/shelf") {

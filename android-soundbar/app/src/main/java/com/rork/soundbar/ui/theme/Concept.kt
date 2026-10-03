@@ -163,7 +163,7 @@ enum class Concept(val id: String) {
     val settingsTitle: String get() = "Settings"
     val themeSettingLabel: String get() = if (this == BAR) "Bar or kitchen" else "Kitchen or bar"
     val rewardsExplainer: String
-        get() = "10 points a song · 25 points an album · ×1.5 base · each badge up to ×25"
+        get() = "10 points a song · 25 points an album · ×1.5 base · each badge up to ×10"
     val eventBadgesTitle: String get() = "Event badges"
     val founderTitle: String get() = "Founder badge"
     val founderDescription: String
@@ -180,6 +180,33 @@ enum class Concept(val id: String) {
         } else {
             "Founder badge earned — the kitchen will remember you."
         }
+
+    /** The friends leaderboard: entry card, the board, and the friend-code exchange. */
+    val leaderboardTitle: String get() = "Leaderboard"
+    val leaderboardTagline: String
+        get() = if (this == BAR) {
+            "Pour more points than your friends."
+        } else {
+            "Plate more points than your friends."
+        }
+    val friendsTitle: String get() = "Friends"
+    val yourCodeLabel: String get() = "Your friend code"
+    val addFriendLabel: String get() = "Add a friend"
+    val friendCodeHint: String get() = "Enter a friend's code"
+    val friendAddButton: String get() = "Add"
+    val youLabel: String get() = "You"
+    val leaderboardEmpty: String
+        get() = if (this == BAR) {
+            "Share your code or add a friend's — then compare pours."
+        } else {
+            "Share your code or add a friend's — then compare dishes."
+        }
+    fun friendAddedMessage(name: String): String = "$name is on your leaderboard."
+    val friendNotFoundMessage: String get() = "No player with that code — check it and try again."
+    val friendOwnCodeMessage: String get() = "That's your own code — add a friend's instead."
+    val friendRemovedMessage: String get() = "Removed from the leaderboard."
+    val leaderboardFailedMessage: String get() = "Couldn't reach the leaderboard — try again shortly."
+    val codeCopiedMessage: String get() = "Friend code copied."
 
     fun badgeEarnedMessage(genre: String): String =
         if (this == BAR) {

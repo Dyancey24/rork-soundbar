@@ -4,6 +4,7 @@ import android.app.Application
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.rork.soundbar.data.AddFriendResult
 import com.rork.soundbar.data.AuthManager
 import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.data.Blend
@@ -15,6 +16,8 @@ import com.rork.soundbar.data.GenreCatalog
 import com.rork.soundbar.data.GuestCard
 import com.rork.soundbar.data.GuestExchange
 import com.rork.soundbar.data.Ingredient
+import com.rork.soundbar.data.LeaderboardData
+import com.rork.soundbar.data.LeaderboardSync
 import com.rork.soundbar.data.Rewards
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
@@ -86,7 +89,10 @@ data class SoundbarUiState(
     val completedAlbums: Set<String> = emptySet(),
     val genreBadges: Set<String> = emptySet(),
     val genreSongs: Map<String, Int> = emptyMap(),
-    val eventBadges: Set<String> = emptySet()
+    val eventBadges: Set<String> = emptySet(),
+    /** The friends leaderboard, once this account has one in the cloud. */
+    val leaderboard: LeaderboardData? = null,
+    val isLeaderboardLoading: Boolean = false
 )
 
 /** How a cloud meeting ended, so a manual refresh can tell the reader what happened. */
@@ -105,6 +111,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private var sharingEnabled: Boolean = false
     private val auth: AuthManager by lazy { AuthManager.get(getApplication()) }
     private val cloudSync: CloudSync by lazy { CloudSync(auth) }
+    private val leaderboardSync: LeaderboardSync by lazy { LeaderboardSync(auth) }
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
     private var hasSynced = false
@@ -119,10 +126,14 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         startSignature()
         if (sharingEnabled) setSharing(true)
 
-        // Whenever an account signs in, meet its shelf in the cloud.
+        // Whenever an account signs in, meet its shelf in the cloud and put
+        // its fresh score on the friends board.
         syncScope.launch {
             auth.state.collect { signed ->
-                if (signed is AuthState.SignedIn) syncNow()
+                if (signed is AuthState.SignedIn) {
+                    syncNow()
+                    pushLeaderboardScore()
+                }
             }
         }
     }
@@ -210,6 +221,77 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    // region leaderboard
+
+    /** Pulls the friends leaderboard, registering the account under its name first. */
+    fun loadLeaderboard() {
+        if (_uiState.value.isLeaderboardLoading) return
+        val accountName = currentAccountName() ?: return
+        _uiState.update { it.copy(isLeaderboardLoading = true) }
+        syncScope.launch {
+            val profile = leaderboardSync.ensureProfile(accountName)
+            val data = if (profile != null) leaderboardSync.fetch() else null
+            _uiState.update { it.copy(leaderboard = data, isLeaderboardLoading = false) }
+        }
+    }
+
+    /** Adds the player behind a friend code, then re-reads the board. */
+    fun addFriend(rawCode: String) {
+        val code = rawCode.trim()
+        if (code.isEmpty()) return
+        syncScope.launch {
+            val outcome = leaderboardSync.addFriend(code)
+            if (outcome is AddFriendResult.Added) {
+                leaderboardSync.fetch()?.let { data ->
+                    _uiState.update { it.copy(leaderboard = data) }
+                }
+            }
+            val concept = _uiState.value.concept
+            val message = when (outcome) {
+                is AddFriendResult.Added -> concept.friendAddedMessage(outcome.player.name)
+                AddFriendResult.UnknownCode -> concept.friendNotFoundMessage
+                AddFriendResult.OwnCode -> concept.friendOwnCodeMessage
+                AddFriendResult.Failed -> concept.leaderboardFailedMessage
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Takes a friend off the board, then re-reads it. */
+    fun removeFriend(friendId: String) {
+        syncScope.launch {
+            val removed = leaderboardSync.removeFriend(friendId)
+            if (removed) {
+                leaderboardSync.fetch()?.let { data ->
+                    _uiState.update { it.copy(leaderboard = data) }
+                }
+            }
+            val concept = _uiState.value.concept
+            withContext(Dispatchers.Main) {
+                val message = if (removed) {
+                    concept.friendRemovedMessage
+                } else {
+                    concept.leaderboardFailedMessage
+                }
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Offers the current point total to the cloud board; cheap, monotonic, idempotent. */
+    private fun pushLeaderboardScore() {
+        val name = currentAccountName() ?: return
+        val points = _uiState.value.points
+        syncScope.launch { leaderboardSync.pushScore(points, name) }
+    }
+
+    private fun currentAccountName(): String? =
+        (auth.state.value as? AuthState.SignedIn)?.user?.name
+
+    // endregion
 
     /** Debounced cloud push after every local save. */
     private fun scheduleSync() {
@@ -676,6 +758,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         }
         persist()
         recomputeStats()
+        pushLeaderboardScore()
     }
 
     // endregion
