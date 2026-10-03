@@ -66,6 +66,7 @@ import com.rork.soundbar.data.GenreCatalog
 import com.rork.soundbar.data.GuestCard
 import com.rork.soundbar.data.RecipeArtist
 import com.rork.soundbar.ui.components.BlendArtwork
+import com.rork.soundbar.ui.components.AvatarArt
 import com.rork.soundbar.ui.components.ConceptToggle
 import com.rork.soundbar.ui.components.Eyebrow
 import com.rork.soundbar.ui.components.HairlineDivider
@@ -553,6 +554,26 @@ private fun GuestRecipeCard(
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 10.dp)
                 )
+                // When the sender opted into a public profile, their name and
+                // mark drift in with the recipe; otherwise it stays anonymous.
+                card.senderName?.takeIf { it.isNotBlank() }?.let { sender ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 10.dp)
+                    ) {
+                        AvatarArt(
+                            avatar = card.senderAvatar,
+                            fallbackText = sender,
+                            size = 22.dp
+                        )
+                        Text(
+                            text = concept.guestFromLabel(sender),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
                 HairlineDivider(modifier = Modifier.padding(vertical = 14.dp))
                 Eyebrow(concept.artistsLabel)
                 Column {

@@ -45,7 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rork.soundbar.data.Avatar
 import com.rork.soundbar.data.LeaderboardData
+import com.rork.soundbar.ui.components.AvatarArt
 import com.rork.soundbar.ui.components.HairlineDivider
 import com.rork.soundbar.ui.theme.LocalConcept
 
@@ -54,6 +56,7 @@ private data class LeaderboardEntry(
     val id: String,
     val name: String,
     val points: Long,
+    val avatar: Avatar?,
     val isMe: Boolean
 )
 
@@ -89,10 +92,26 @@ fun LeaderboardScreen(
     val entries = remember(leaderboard, points) {
         buildList {
             leaderboard?.me?.let { me ->
-                add(LeaderboardEntry(me.id, me.name, maxOf(me.points, points), isMe = true))
+                add(
+                    LeaderboardEntry(
+                        id = me.id,
+                        name = me.name,
+                        points = maxOf(me.points, points),
+                        avatar = Avatar.fromCode(me.avatar),
+                        isMe = true
+                    )
+                )
             }
             leaderboard?.friends?.forEach { friend ->
-                add(LeaderboardEntry(friend.id, friend.name, friend.points, isMe = false))
+                add(
+                    LeaderboardEntry(
+                        id = friend.id,
+                        name = friend.name,
+                        points = friend.points,
+                        avatar = Avatar.fromCode(friend.avatar),
+                        isMe = false
+                    )
+                )
             }
         }.sortedByDescending { it.points }
     }
@@ -143,6 +162,7 @@ fun LeaderboardScreen(
                     MeCard(
                         points = points,
                         code = leaderboard?.me?.code,
+                        avatar = Avatar.fromCode(leaderboard?.me?.avatar),
                         onCopy = { code ->
                             clipboard.setText(AnnotatedString(code))
                             Toast.makeText(context, concept.codeCopiedMessage, Toast.LENGTH_SHORT).show()
@@ -160,11 +180,12 @@ fun LeaderboardScreen(
     }
 }
 
-/** The reader's own plaque: their live score and the code friends trade. */
+/** The reader's own plaque: their mark, live score, and the code friends trade. */
 @Composable
 private fun MeCard(
     points: Long,
     code: String?,
+    avatar: Avatar?,
     onCopy: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -177,20 +198,12 @@ private fun MeCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            text = concept.youLabel.take(1),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                AvatarArt(
+                    avatar = avatar,
+                    fallbackText = concept.youLabel,
+                    size = 48.dp,
+                    contentDescription = concept.youLabel
+                )
                 Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(
                         text = concept.youLabel,
@@ -378,6 +391,12 @@ private fun BoardRow(
                 )
             }
         }
+        AvatarArt(
+            avatar = entry.avatar,
+            fallbackText = entry.name,
+            size = 26.dp,
+            modifier = Modifier.padding(start = 6.dp)
+        )
         Text(
             text = if (entry.isMe) "${entry.name} · ${concept.youLabel}" else entry.name,
             color = MaterialTheme.colorScheme.onSurface,

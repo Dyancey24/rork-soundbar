@@ -77,6 +77,7 @@ import com.rork.soundbar.ui.screens.DishScreen
 import com.rork.soundbar.ui.screens.LeaderboardScreen
 import com.rork.soundbar.ui.screens.MenuScreen
 import com.rork.soundbar.ui.screens.MixScreen
+import com.rork.soundbar.ui.screens.ProfileScreen
 import com.rork.soundbar.ui.screens.ShelfScreen
 import com.rork.soundbar.ui.screens.SignInScreen
 import com.rork.soundbar.ui.theme.AppTheme
@@ -307,6 +308,7 @@ private fun AppShell(
                     eventBadges = state.eventBadges,
                     songsHeard = state.listenedTracks.size,
                     albumsCompleted = state.completedAlbums.size,
+                    profile = state.profile,
                     selectedPlatform = state.selectedPlatform,
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
@@ -315,6 +317,7 @@ private fun AppShell(
                     onSetSharing = viewModel::setSharing,
                     onSignIn = { navController.navigate("signin") },
                     onSignOut = onSignOut,
+                    onOpenProfile = { navController.navigate("profile") },
                     onOpenLeaderboard = { navController.navigate("leaderboard") },
                     contentPadding = padding
                 )
@@ -330,6 +333,14 @@ private fun AppShell(
                     onRemoveFriend = viewModel::removeFriend,
                     onBack = { navController.popBackStack() },
                     onSignIn = { navController.navigate("signin") },
+                    contentPadding = padding
+                )
+            }
+            composable("profile") {
+                ProfileScreen(
+                    profile = state.profile,
+                    onUpdate = viewModel::updateProfile,
+                    onBack = { navController.popBackStack() },
                     contentPadding = padding
                 )
             }

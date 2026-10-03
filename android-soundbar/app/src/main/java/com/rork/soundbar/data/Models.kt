@@ -59,13 +59,53 @@ data class Blend(
 }
 
 /**
- * A recipe collected from a guest nearby. Carries the playlist alone — the
- * exchange never transmits a name, account, or anything else about the sender.
+ * A recipe collected from a guest nearby. The playlist always crosses the air;
+ * the sender's name and mark only come along when that guest has opted into a
+ * public profile — otherwise the card stays anonymous.
  */
 @Serializable
 data class GuestCard(
     val blend: Blend,
-    val receivedAtMillis: Long
+    val receivedAtMillis: Long,
+    val senderName: String? = null,
+    val senderAvatar: Avatar? = null
+)
+
+/**
+ * The reader's avatar art: one of the house's preset marks drawn in one of the
+ * fixed colour pairs. Both sides of the exchange know the same catalogue, so a
+ * glyph id plus a palette index is all that ever needs to travel or persist.
+ */
+@Serializable
+data class Avatar(
+    val glyph: String,
+    val palette: Int
+) {
+    /** Compact wire form, e.g. "vinyl:3" — what the cloud leaderboard stores. */
+    val code: String get() = "$glyph:$palette"
+
+    companion object {
+        fun fromCode(code: String?): Avatar? {
+            if (code == null) return null
+            val parts = code.split(":")
+            val palette = parts.getOrNull(1)?.toIntOrNull() ?: return null
+            val glyph = parts.getOrNull(0) ?: return null
+            return Avatar(glyph, palette)
+        }
+    }
+}
+
+/**
+ * The reader's public-facing self: a chosen username and avatar mark, plus the
+ * opt-in switch. Everything here stays on the device unless [Profile.isPublic]
+ * is on — only then do the name and mark ride the walk-by playlist and the
+ * friends leaderboard.
+ */
+@Serializable
+data class Profile(
+    val username: String = "",
+    val avatar: Avatar? = null,
+    val isPublic: Boolean = false
 )
 
 /** Persisted shelf state so a user's collection survives app restarts. */
@@ -93,6 +133,8 @@ data class ShelfState(
     val genreSongs: Map<String, Int> = emptyMap(),
     /** Limited, exclusive event badges — ids from Rewards. */
     val eventBadges: Set<String> = emptySet(),
+    /** The reader's username, avatar mark, and the public-profile opt-in. */
+    val profile: Profile = Profile(),
     val seeded: Boolean = false,
     /** Millis stamp of the newest write; the cloud keeps the latest. */
     val updatedAt: Long = 0L

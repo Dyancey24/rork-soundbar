@@ -208,6 +208,39 @@ enum class Concept(val id: String) {
     val leaderboardFailedMessage: String get() = "Couldn't reach the leaderboard — try again shortly."
     val codeCopiedMessage: String get() = "Friend code copied."
 
+    /** The profile: the reader's chosen name, mark, and the public opt-in. */
+    val profileTitle: String get() = "Your profile"
+    val profileTagline: String
+        get() = if (this == BAR) "How the house knows you." else "How the kitchen knows you."
+    val profileNameLabel: String get() = "Username"
+    val profileNameHint: String
+        get() = if (this == BAR) "Name on your house card" else "Name on your kitchen card"
+    val profileMarkLabel: String get() = "Pick your mark"
+    val profileColorLabel: String get() = "Pick your colours"
+    val profilePublicTitle: String get() = "Public profile"
+    val profilePublicOnHint: String
+        get() = if (this == BAR) {
+            "Your name and mark ride along when your house pour passes a guest, and they show on the friends leaderboard."
+        } else {
+            "Your name and mark ride along when your house special passes a guest, and they show on the friends leaderboard."
+        }
+    val profilePublicOffHint: String
+        get() = "Private — only the playlist travels. No name, no mark, nothing about you."
+    val profilePublicOnMessage: String
+        get() = if (this == BAR) {
+            "Public — your name and mark now ride the pass."
+        } else {
+            "Public — your name and mark now ride the counter."
+        }
+    val profilePublicOffMessage: String get() = "Private again — the playlist travels alone."
+    val profileFootnote: String
+        get() = "Your profile lives on this device. Turning it off pulls your name and mark back in everywhere."
+    val profilePublicOnTag: String
+        get() = if (this == BAR) "Public — your name rides the pass" else "Public — your name rides the counter"
+    val profilePublicOffTag: String get() = "Private — only the playlist travels"
+
+    fun guestFromLabel(name: String): String = "From $name"
+
     fun badgeEarnedMessage(genre: String): String =
         if (this == BAR) {
             "New badge: $genre — every pour now earns more."

@@ -31,7 +31,9 @@ import kotlinx.serialization.json.put
 data class LeaderboardPlayer(
     val id: String,
     val name: String,
-    val points: Long = 0L
+    val points: Long = 0L,
+    /** The player's avatar mark as a "glyph:palette" code, when they opted in. */
+    val avatar: String? = null
 )
 
 /** The signed-in player's own entry, including the code friends use to add them. */
@@ -40,7 +42,8 @@ data class LeaderboardProfile(
     val id: String,
     val name: String,
     val code: String,
-    val points: Long = 0L
+    val points: Long = 0L,
+    val avatar: String? = null
 )
 
 /** The whole board: the reader's own entry plus the friends they added. */
@@ -69,9 +72,12 @@ class LeaderboardSync(private val auth: AuthManager) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Registers (or renames) the signed-in player and returns their friend code. */
-    suspend fun ensureProfile(name: String): LeaderboardProfile? = withContext(Dispatchers.IO) {
+    suspend fun ensureProfile(name: String, avatar: Avatar? = null): LeaderboardProfile? = withContext(Dispatchers.IO) {
         try {
-            val body = buildJsonObject { put("name", name) }.toString()
+            val body = buildJsonObject {
+                put("name", name)
+                put("avatar", avatar?.code)
+            }.toString()
             val response = authorized { token ->
                 http.post("${AuthConfig.FUNCTIONS_URL}/leaderboard/profile") {
                     header(HttpHeaders.Authorization, "Bearer $token")
@@ -104,11 +110,12 @@ class LeaderboardSync(private val auth: AuthManager) {
     }
 
     /** Offers the current point total; the cloud only ever ratchets it upward. */
-    suspend fun pushScore(points: Long, name: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun pushScore(points: Long, name: String, avatar: Avatar? = null): Boolean = withContext(Dispatchers.IO) {
         try {
             val body = buildJsonObject {
                 put("points", points)
                 put("name", name)
+                put("avatar", avatar?.code)
             }.toString()
             val response = authorized { token ->
                 http.put("${AuthConfig.FUNCTIONS_URL}/leaderboard/score") {
@@ -147,7 +154,8 @@ class LeaderboardSync(private val auth: AuthManager) {
                         LeaderboardPlayer(
                             id = friend.str("id") ?: return@withContext AddFriendResult.Failed,
                             name = friend.str("name") ?: "Guest",
-                            points = friend.str("points")?.toLongOrNull() ?: 0L
+                            points = friend.str("points")?.toLongOrNull() ?: 0L,
+                            avatar = friend.str("avatar")
                         )
                     )
                 }

@@ -17,19 +17,33 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.security.SecureRandom
 
 /**
+ * What travels over the air on the pass: the playlist itself, plus the
+ * sender's name and mark — but only when they've opted into a public profile.
+ * An opted-out pour sends the playlist with both identity fields null.
+ */
+@Serializable
+private data class SharedPour(
+    val blend: Blend,
+    val senderName: String? = null,
+    val senderAvatar: Avatar? = null
+)
+
+/**
  * The guest exchange. While it runs, the app quietly advertises the user's
  * signature playlist over Nearby Connections and collects the same from anyone
- * nearby. Only the playlist bytes cross the air — the on-air name is a random
- * anonymous token, connections are auto-accepted, and no account, id, or other
- * identifying information is ever transmitted.
+ * nearby. The on-air name is a random anonymous token and connections are
+ * auto-accepted; only the playlist crosses the air unless the sender has
+ * opted into a public profile, in which case their chosen username and avatar
+ * mark ride along too — never an account, id, or anything else.
  */
 class GuestExchange(
     context: Context,
-    private val onGuestBlend: (Blend) -> Unit,
+    private val onGuestBlend: (Blend, String?, Avatar?) -> Unit,
     private val onStateChanged: (State) -> Unit
 ) {
 
@@ -44,6 +58,10 @@ class GuestExchange(
     private val localName = "guest-" + randomToken(4)
 
     private var signature: Blend? = null
+
+    /** The public identity riding the pass; null unless the reader opted in. */
+    private var senderName: String? = null
+    private var senderAvatar: Avatar? = null
     private val connected = mutableSetOf<String>()
 
     private val adOptions = AdvertisingOptions.Builder()
@@ -79,6 +97,17 @@ class GuestExchange(
         if (blend != null) connected.forEach { sendTo(it, blend) }
     }
 
+    /**
+     * Sets the identity that rides the pass — the public username and mark
+     * when the reader has opted in, or null to travel anonymous. Connected
+     * guests are refreshed so a mid-session opt-in updates what they see.
+     */
+    fun setSender(name: String?, avatar: Avatar?) {
+        senderName = name?.takeIf { it.isNotBlank() }
+        senderAvatar = if (senderName != null) avatar else null
+        signature?.let { blend -> connected.forEach { sendTo(it, blend) } }
+    }
+
     fun stop() {
         try {
             connections.stopAdvertising()
@@ -93,7 +122,12 @@ class GuestExchange(
 
     private fun sendTo(endpointId: String, blend: Blend) {
         try {
-            val bytes = json.encodeToString(Blend.serializer(), blend).toByteArray(Charsets.UTF_8)
+            val pour = SharedPour(
+                blend = blend,
+                senderName = senderName,
+                senderAvatar = senderAvatar
+            )
+            val bytes = json.encodeToString(SharedPour.serializer(), pour).toByteArray(Charsets.UTF_8)
             connections.sendPayload(endpointId, Payload.fromBytes(bytes))
         } catch (e: Exception) {
             connected.remove(endpointId)
@@ -142,13 +176,25 @@ class GuestExchange(
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type != Payload.Type.BYTES) return
             val bytes = payload.asBytes() ?: return
-            val blend = try {
-                val decoded = json.decodeFromString(Blend.serializer(), String(bytes, Charsets.UTF_8))
-                if (decoded.tracks.isEmpty()) null else decoded
+            val text = String(bytes, Charsets.UTF_8)
+            val received = try {
+                // The current wire format: a pour with an optional sender.
+                val pour = json.decodeFromString(SharedPour.serializer(), text)
+                if (pour.blend.tracks.isEmpty()) {
+                    null
+                } else {
+                    Triple(pour.blend, pour.senderName, pour.senderAvatar)
+                }
             } catch (e: Exception) {
-                null
+                try {
+                    // An older pour: a bare playlist from an anonymous guest.
+                    val blend = json.decodeFromString(Blend.serializer(), text)
+                    if (blend.tracks.isEmpty()) null else Triple(blend, null, null)
+                } catch (e2: Exception) {
+                    null
+                }
             }
-            blend?.let { main.post { onGuestBlend(it) } }
+            received?.let { (blend, name, avatar) -> main.post { onGuestBlend(blend, name, avatar) } }
         }
 
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) = Unit

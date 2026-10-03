@@ -46,8 +46,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Genre
 import com.rork.soundbar.data.GenreCatalog
+import com.rork.soundbar.data.Profile
 import com.rork.soundbar.data.Rewards
 import com.rork.soundbar.data.StreamingPlatform
+import com.rork.soundbar.ui.components.AvatarArt
 import com.rork.soundbar.ui.components.ConceptToggle
 import com.rork.soundbar.ui.components.HairlineDivider
 import com.rork.soundbar.ui.components.SectionTitle
@@ -70,6 +72,7 @@ fun AccountScreen(
     eventBadges: Set<String>,
     songsHeard: Int,
     albumsCompleted: Int,
+    profile: Profile,
     selectedPlatform: StreamingPlatform,
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
@@ -78,6 +81,7 @@ fun AccountScreen(
     onSetSharing: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onOpenProfile: () -> Unit,
     onOpenLeaderboard: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
@@ -118,6 +122,10 @@ fun AccountScreen(
                 } else {
                     SignInInvitation(onClick = onSignIn)
                 }
+            }
+
+            item("profile") {
+                ProfileCard(profile = profile, onOpen = onOpenProfile)
             }
 
             item("rewards") {
@@ -214,6 +222,52 @@ private fun AccountCard(
             TextButton(onClick = onSignOut) {
                 Text(text = "Sign out", fontSize = 12.sp)
             }
+        }
+    }
+}
+
+/** The reader's card: the chosen name and mark, and whether the house shares them. */
+@Composable
+private fun ProfileCard(profile: Profile, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AvatarArt(
+                avatar = profile.avatar,
+                fallbackText = profile.username.ifBlank { null },
+                size = 48.dp,
+                contentDescription = concept.profileTitle
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = profile.username.ifBlank { concept.profileTitle },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (profile.isPublic) concept.profilePublicOnTag else concept.profilePublicOffTag,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = concept.profileTitle,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
     }
 }

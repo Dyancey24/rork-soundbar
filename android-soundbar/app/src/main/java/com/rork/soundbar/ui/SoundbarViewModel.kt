@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.rork.soundbar.data.AddFriendResult
 import com.rork.soundbar.data.AuthManager
 import com.rork.soundbar.data.AuthState
+import com.rork.soundbar.data.Avatar
 import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
 import com.rork.soundbar.data.CloudSync
@@ -18,6 +19,7 @@ import com.rork.soundbar.data.GuestExchange
 import com.rork.soundbar.data.Ingredient
 import com.rork.soundbar.data.LeaderboardData
 import com.rork.soundbar.data.LeaderboardSync
+import com.rork.soundbar.data.Profile
 import com.rork.soundbar.data.Rewards
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
@@ -90,6 +92,8 @@ data class SoundbarUiState(
     val genreBadges: Set<String> = emptySet(),
     val genreSongs: Map<String, Int> = emptyMap(),
     val eventBadges: Set<String> = emptySet(),
+    /** The reader's chosen name, mark, and the public-profile opt-in. */
+    val profile: Profile = Profile(),
     /** The friends leaderboard, once this account has one in the cloud. */
     val leaderboard: LeaderboardData? = null,
     val isLeaderboardLoading: Boolean = false
@@ -107,6 +111,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private var mixDays: List<Long> = emptyList()
     private var tickerJob: Job? = null
     private var noteSaveJob: Job? = null
+    private var profilePushJob: Job? = null
     private var exchange: GuestExchange? = null
     private var sharingEnabled: Boolean = false
     private val auth: AuthManager by lazy { AuthManager.get(getApplication()) }
@@ -160,7 +165,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 completedAlbums = stored.completedAlbums,
                 genreBadges = stored.genreBadges,
                 genreSongs = stored.genreSongs,
-                eventBadges = stored.eventBadges
+                eventBadges = stored.eventBadges,
+                profile = stored.profile
             )
         }
         mixDays = stored.mixDays
@@ -227,10 +233,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     /** Pulls the friends leaderboard, registering the account under its name first. */
     fun loadLeaderboard() {
         if (_uiState.value.isLeaderboardLoading) return
-        val accountName = currentAccountName() ?: return
+        val name = boardName() ?: return
         _uiState.update { it.copy(isLeaderboardLoading = true) }
         syncScope.launch {
-            val profile = leaderboardSync.ensureProfile(accountName)
+            val profile = leaderboardSync.ensureProfile(name, boardAvatar())
             val data = if (profile != null) leaderboardSync.fetch() else null
             _uiState.update { it.copy(leaderboard = data, isLeaderboardLoading = false) }
         }
@@ -283,13 +289,61 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     /** Offers the current point total to the cloud board; cheap, monotonic, idempotent. */
     private fun pushLeaderboardScore() {
-        val name = currentAccountName() ?: return
+        val name = boardName() ?: return
         val points = _uiState.value.points
-        syncScope.launch { leaderboardSync.pushScore(points, name) }
+        syncScope.launch { leaderboardSync.pushScore(points, name, boardAvatar()) }
     }
 
     private fun currentAccountName(): String? =
         (auth.state.value as? AuthState.SignedIn)?.user?.name
+
+    /**
+     * The name the board shows: the chosen username once the profile is
+     * public, otherwise the account's own name.
+     */
+    private fun boardName(): String? {
+        val profile = _uiState.value.profile
+        if (profile.isPublic && profile.username.isNotBlank()) return profile.username
+        return currentAccountName()
+    }
+
+    /** The mark the board shows — only when the profile is public. */
+    private fun boardAvatar(): Avatar? =
+        _uiState.value.profile.takeIf { it.isPublic }?.avatar
+
+    // endregion
+
+    // region profile
+
+    /**
+     * Saves the reader's username, mark, and opt-in. The shelf persists right
+     * away, the pass updates what it advertises, and the cloud board follows
+     * on a short debounce so typing never spams it.
+     */
+    fun updateProfile(username: String, avatar: Avatar?, isPublic: Boolean) {
+        val cleaned = username.trim().replace(Regex("\\s+"), " ").take(MAX_USERNAME)
+        _uiState.update { it.copy(profile = Profile(cleaned, avatar, isPublic)) }
+        persist()
+        exchange?.setSender(publicSenderName(), publicSenderAvatar())
+        scheduleProfilePush()
+    }
+
+    /** The identity riding the pass; null unless the profile is public. */
+    private fun publicSenderName(): String? =
+        _uiState.value.profile.takeIf { it.isPublic }?.username?.takeIf { it.isNotBlank() }
+
+    private fun publicSenderAvatar(): Avatar? =
+        _uiState.value.profile.takeIf { it.isPublic }?.avatar
+
+    private fun scheduleProfilePush() {
+        if (auth.state.value !is AuthState.SignedIn) return
+        profilePushJob?.cancel()
+        profilePushJob = syncScope.launch {
+            delay(PROFILE_PUSH_DEBOUNCE_MILLIS)
+            val name = boardName() ?: return@launch
+            leaderboardSync.pushScore(_uiState.value.points, name, boardAvatar())
+        }
+    }
 
     // endregion
 
@@ -544,6 +598,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 onGuestBlend = ::addGuestBlend,
                 onStateChanged = ::onExchangeState
             ).also { exchange = it }
+            client.setSender(publicSenderName(), publicSenderAvatar())
             client.start(currentSignature())
         } else {
             exchange?.stop()
@@ -580,8 +635,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     }
 
     /** Files a recipe that drifted in from a guest; duplicates are ignored. */
-    private fun addGuestBlend(blend: Blend) {
-        val card = GuestCard(blend.copy(id = "guest-${blend.id}"), System.currentTimeMillis())
+    private fun addGuestBlend(blend: Blend, senderName: String?, senderAvatar: Avatar?) {
+        val card = GuestCard(
+            blend = blend.copy(id = "guest-${blend.id}"),
+            receivedAtMillis = System.currentTimeMillis(),
+            senderName = senderName?.takeIf { it.isNotBlank() },
+            senderAvatar = senderAvatar
+        )
         _uiState.update { state ->
             if (state.guests.any { it.blend.id == card.blend.id } ||
                 state.shelf.any { it.id == card.blend.id }
@@ -827,6 +887,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 genreBadges = state.genreBadges,
                 genreSongs = state.genreSongs,
                 eventBadges = state.eventBadges,
+                profile = state.profile,
                 seeded = true,
                 updatedAt = System.currentTimeMillis()
             )
@@ -849,6 +910,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         const val NOTE_SAVE_MILLIS = 400L
         const val MAX_GUESTS = 60
         const val SYNC_DEBOUNCE_MILLIS = 3000L
+        const val MAX_USERNAME = 24
+        const val PROFILE_PUSH_DEBOUNCE_MILLIS = 2000L
 
         /** Local calendar day index, kept free of java.time so minSdk 24 stays happy. */
         fun today(): Long {
