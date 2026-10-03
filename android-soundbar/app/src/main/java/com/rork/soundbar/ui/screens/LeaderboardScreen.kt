@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Avatar
 import com.rork.soundbar.data.LeaderboardData
+import com.rork.soundbar.data.LeaderboardPlayer
 import com.rork.soundbar.ui.components.AvatarArt
 import com.rork.soundbar.ui.components.HairlineDivider
 import com.rork.soundbar.ui.theme.LocalConcept
@@ -61,9 +62,10 @@ private data class LeaderboardEntry(
 )
 
 /**
- * The friends leaderboard: the reader's score and friend code, a row to add
- * a friend by code, and the ranked board beneath. The board lives in the
- * cloud under the signed-in account, so guests are shown the sign-in door.
+ * The friends leaderboard: the reader's score and friend code, a row to
+ * invite a friend by code, the invites waiting on a nod, and the ranked
+ * board of confirmed friendships beneath. The board lives in the cloud
+ * under the signed-in account, so guests are shown the sign-in door.
  */
 @Composable
 fun LeaderboardScreen(
@@ -73,6 +75,8 @@ fun LeaderboardScreen(
     isLoading: Boolean,
     onRefresh: () -> Unit,
     onAddFriend: (String) -> Unit,
+    onAcceptInvite: (String) -> Unit,
+    onDeclineInvite: (String) -> Unit,
     onRemoveFriend: (String) -> Unit,
     onBack: () -> Unit,
     onSignIn: () -> Unit,
@@ -172,6 +176,18 @@ fun LeaderboardScreen(
                 item("add") {
                     AddFriendCard(onAdd = onAddFriend)
                 }
+                val incoming = leaderboard?.incoming.orEmpty()
+                val outgoing = leaderboard?.outgoing.orEmpty()
+                if (incoming.isNotEmpty() || outgoing.isNotEmpty()) {
+                    item("invites") {
+                        InvitesCard(
+                            incoming = incoming,
+                            outgoing = outgoing,
+                            onAccept = onAcceptInvite,
+                            onDecline = onDeclineInvite
+                        )
+                    }
+                }
                 item("board") {
                     BoardCard(entries = entries, isLoading = isLoading, onRemove = onRemoveFriend)
                 }
@@ -261,7 +277,7 @@ private fun MeCard(
     }
 }
 
-/** The friend-code exchange: type a friend's code, pour them onto the board. */
+/** The friend-code exchange: type a friend's code to raise them an invite. */
 @Composable
 private fun AddFriendCard(onAdd: (String) -> Unit, modifier: Modifier = Modifier) {
     val concept = LocalConcept.current
@@ -300,6 +316,138 @@ private fun AddFriendCard(onAdd: (String) -> Unit, modifier: Modifier = Modifier
                     modifier = Modifier.padding(start = 10.dp)
                 ) {
                     Text(text = concept.friendAddButton)
+                }
+            }
+            Text(
+                text = concept.inviteHint,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The nod exchange: glasses raised to the reader (accept to clink, or pass),
+ * and the reader's own invites still waiting on the other side.
+ */
+@Composable
+private fun InvitesCard(
+    incoming: List<LeaderboardPlayer>,
+    outgoing: List<LeaderboardPlayer>,
+    onAccept: (String) -> Unit,
+    onDecline: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            if (incoming.isNotEmpty()) {
+                Text(
+                    text = concept.invitesTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                incoming.forEach { player ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                    ) {
+                        AvatarArt(
+                            avatar = Avatar.fromCode(player.avatar),
+                            fallbackText = player.name,
+                            size = 32.dp
+                        )
+                        Text(
+                            text = player.name,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 10.dp)
+                        )
+                        Button(
+                            onClick = { onAccept(player.id) },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = concept.inviteAcceptButton,
+                                fontSize = 12.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { onDecline(player.id) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = concept.invitePassButton,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            if (outgoing.isNotEmpty()) {
+                if (incoming.isNotEmpty()) {
+                    HairlineDivider(modifier = Modifier.padding(vertical = 12.dp))
+                }
+                outgoing.forEach { player ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = if (incoming.isEmpty() && player == outgoing.first()) 0.dp else 8.dp)
+                    ) {
+                        AvatarArt(
+                            avatar = Avatar.fromCode(player.avatar),
+                            fallbackText = player.name,
+                            size = 32.dp
+                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 10.dp)
+                        ) {
+                            Text(
+                                text = player.name,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = concept.inviteWaitingLabel,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { onDecline(player.id) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = concept.friendRemovedMessage,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -255,17 +255,60 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         if (code.isEmpty()) return
         syncScope.launch {
             val outcome = leaderboardSync.addFriend(code)
-            if (outcome is AddFriendResult.Added) {
+            if (outcome is AddFriendResult.Confirmed || outcome is AddFriendResult.Invited) {
                 leaderboardSync.fetch()?.let { data ->
                     _uiState.update { it.copy(leaderboard = data) }
                 }
             }
             val concept = _uiState.value.concept
             val message = when (outcome) {
-                is AddFriendResult.Added -> concept.friendAddedMessage(outcome.player.name)
+                is AddFriendResult.Confirmed -> concept.friendClinkedMessage(outcome.player.name)
+                is AddFriendResult.Invited -> concept.friendInvitedMessage(outcome.player.name)
                 AddFriendResult.UnknownCode -> concept.friendNotFoundMessage
                 AddFriendResult.OwnCode -> concept.friendOwnCodeMessage
                 AddFriendResult.Failed -> concept.leaderboardFailedMessage
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Clinks back on an incoming invite, then re-reads the board. */
+    fun acceptInvite(playerId: String) {
+        syncScope.launch {
+            val friend = leaderboardSync.acceptInvite(playerId)
+            if (friend != null) {
+                leaderboardSync.fetch()?.let { data ->
+                    _uiState.update { it.copy(leaderboard = data) }
+                }
+            }
+            val concept = _uiState.value.concept
+            val message = if (friend != null) {
+                concept.friendClinkedMessage(friend.name)
+            } else {
+                concept.leaderboardFailedMessage
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Passes on an incoming invite — or takes back one we sent — then refreshes. */
+    fun declineInvite(playerId: String) {
+        syncScope.launch {
+            val declined = leaderboardSync.declineInvite(playerId)
+            if (declined) {
+                leaderboardSync.fetch()?.let { data ->
+                    _uiState.update { it.copy(leaderboard = data) }
+                }
+            }
+            val concept = _uiState.value.concept
+            val message = if (declined) {
+                concept.friendPassedMessage
+            } else {
+                concept.leaderboardFailedMessage
             }
             withContext(Dispatchers.Main) {
                 Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()

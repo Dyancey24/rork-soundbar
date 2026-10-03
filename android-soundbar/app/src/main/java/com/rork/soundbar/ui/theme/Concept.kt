@@ -201,12 +201,44 @@ enum class Concept(val id: String) {
         } else {
             "Share your code or add a friend's — then compare dishes."
         }
-    fun friendAddedMessage(name: String): String = "$name is on your leaderboard."
+    fun friendInvitedMessage(name: String): String =
+        if (this == BAR) {
+            "Raised a glass to $name — you'll share a board when they raise one back."
+        } else {
+            "Offered $name a taste — you'll share a board when they taste back."
+        }
+    fun friendClinkedMessage(name: String): String =
+        if (this == BAR) {
+            "Clink — you and $name now share a leaderboard."
+        } else {
+            "Taste traded — you and $name now share a leaderboard."
+        }
     val friendNotFoundMessage: String get() = "No player with that code — check it and try again."
     val friendOwnCodeMessage: String get() = "That's your own code — add a friend's instead."
     val friendRemovedMessage: String get() = "Removed from the leaderboard."
+    val friendPassedMessage: String
+        get() = if (this == BAR) {
+            "Passed — the glass stays unraised."
+        } else {
+            "Passed — the taste stays untasted."
+        }
     val leaderboardFailedMessage: String get() = "Couldn't reach the leaderboard — try again shortly."
     val codeCopiedMessage: String get() = "Friend code copied."
+
+    /** The mutual-confirmation flow: it takes two to share a board. */
+    val inviteHint: String
+        get() = if (this == BAR) {
+            "It takes two to clink — you'll share a board once they add your code too."
+        } else {
+            "It takes two to trade tastes — you'll share a board once they add your code too."
+        }
+    val invitesTitle: String
+        get() = if (this == BAR) "Glasses raised to you" else "Tastes offered to you"
+    val inviteAcceptButton: String
+        get() = if (this == BAR) "Clink back" else "Taste back"
+    val invitePassButton: String get() = "Pass"
+    val inviteWaitingLabel: String
+        get() = if (this == BAR) "Waiting on their clink" else "Waiting on their taste"
 
     /** The profile: the reader's chosen name, mark, and the public opt-in. */
     val profileTitle: String get() = "Your profile"

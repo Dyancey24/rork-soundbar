@@ -46,16 +46,25 @@ data class LeaderboardProfile(
     val avatar: String? = null
 )
 
-/** The whole board: the reader's own entry plus the friends they added. */
+/**
+ * The whole board: the reader's own entry, confirmed friends (both sides have
+ * added each other), invites waiting on the reader's nod, and invites the
+ * reader has sent that are still waiting on the other side.
+ */
 @Serializable
 data class LeaderboardData(
     val me: LeaderboardProfile? = null,
-    val friends: List<LeaderboardPlayer> = emptyList()
+    val friends: List<LeaderboardPlayer> = emptyList(),
+    val incoming: List<LeaderboardPlayer> = emptyList(),
+    val outgoing: List<LeaderboardPlayer> = emptyList()
 )
 
 /** What came of offering a friend code. */
 sealed interface AddFriendResult {
-    data class Added(val player: LeaderboardPlayer) : AddFriendResult
+    /** The other side had already offered — glasses clinked, friends now. */
+    data class Confirmed(val player: LeaderboardPlayer) : AddFriendResult
+    /** The invite is with them; the board is shared once they add back. */
+    data class Invited(val player: LeaderboardPlayer) : AddFriendResult
     data object UnknownCode : AddFriendResult
     data object OwnCode : AddFriendResult
     data object Failed : AddFriendResult
@@ -131,7 +140,10 @@ class LeaderboardSync(private val auth: AuthManager) {
         }
     }
 
-    /** Adds the player behind a friend code to this reader's board. */
+    /**
+     * Offers the player behind a friend code an invite. Friendship only
+     * exists once they offer one back — the cloud does the clinking.
+     */
     suspend fun addFriend(code: String): AddFriendResult = withContext(Dispatchers.IO) {
         try {
             val body = buildJsonObject { put("code", code.trim().uppercase()) }.toString()
@@ -150,19 +162,67 @@ class LeaderboardSync(private val auth: AuthManager) {
                     val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
                     val friend = payload["friend"]?.jsonObject
                         ?: return@withContext AddFriendResult.Failed
-                    AddFriendResult.Added(
-                        LeaderboardPlayer(
-                            id = friend.str("id") ?: return@withContext AddFriendResult.Failed,
-                            name = friend.str("name") ?: "Guest",
-                            points = friend.str("points")?.toLongOrNull() ?: 0L,
-                            avatar = friend.str("avatar")
-                        )
+                    val player = LeaderboardPlayer(
+                        id = friend.str("id") ?: return@withContext AddFriendResult.Failed,
+                        name = friend.str("name") ?: "Guest",
+                        points = friend.str("points")?.toLongOrNull() ?: 0L,
+                        avatar = friend.str("avatar")
                     )
+                    if (payload.str("status") == "confirmed") {
+                        AddFriendResult.Confirmed(player)
+                    } else {
+                        AddFriendResult.Invited(player)
+                    }
                 }
             }
         } catch (error: Exception) {
             Log.w(TAG, "Add friend failed")
             AddFriendResult.Failed
+        }
+    }
+
+    /**
+     * Clinks back: accepts the invite from this player, confirming the
+     * friendship for both sides. Returns the newly confirmed friend.
+     */
+    suspend fun acceptInvite(playerId: String): LeaderboardPlayer? = withContext(Dispatchers.IO) {
+        try {
+            val body = buildJsonObject { put("id", playerId) }.toString()
+            val response = authorized { token ->
+                http.post("${AuthConfig.FUNCTIONS_URL}/leaderboard/friends/accept") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            }
+            if (!response.status.isSuccess()) return@withContext null
+            val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val friend = payload["friend"]?.jsonObject ?: return@withContext null
+            LeaderboardPlayer(
+                id = friend.str("id") ?: return@withContext null,
+                name = friend.str("name") ?: "Guest",
+                points = friend.str("points")?.toLongOrNull() ?: 0L,
+                avatar = friend.str("avatar")
+            )
+        } catch (error: Exception) {
+            Log.w(TAG, "Accept invite failed")
+            null
+        }
+    }
+
+    /** Passes on an incoming invite — or takes back one this reader sent. */
+    suspend fun declineInvite(playerId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val response = authorized { token ->
+                http.delete("${AuthConfig.FUNCTIONS_URL}/leaderboard/friends/requests") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    parameter("id", playerId)
+                }
+            }
+            response.status.isSuccess()
+        } catch (error: Exception) {
+            Log.w(TAG, "Decline invite failed")
+            false
         }
     }
 

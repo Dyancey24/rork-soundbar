@@ -2,7 +2,8 @@
 //
 // One global Durable Object ("global:leaderboard") keeps a SQLite row per
 // player and per friendship. Players join by signing in (Rork Auth stamps
-// X-Rork-User-Id), share a short friend code, and add each other by code.
+// X-Rork-User-Id), share a short friend code, and invite each other by code —
+// a friendship only exists once BOTH sides have added each other (a clink).
 // Scores ratchet: a player's stored points only ever move up, so a stale
 // client can never drag a score backwards.
 
@@ -70,12 +71,29 @@ export class Leaderboard extends DurableObject {
         PRIMARY KEY (user_id, friend_id)
       )
     `);
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS requests (
+        from_id TEXT NOT NULL,
+        to_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (from_id, to_id)
+      )
+    `);
     // Avatars arrived after the first tables; older databases grow the column.
     try {
       this.ctx.storage.sql.exec("ALTER TABLE players ADD COLUMN avatar TEXT");
     } catch {
       // Column already exists.
     }
+    // Mutual confirmation arrived after the first friendships: one-way rows
+    // from the old add-by-code flow are dropped — both sides must clink.
+    this.ctx.storage.sql.exec(`
+      DELETE FROM friends WHERE NOT EXISTS (
+        SELECT 1 FROM friends reciprocal
+        WHERE reciprocal.user_id = friends.friend_id
+          AND reciprocal.friend_id = friends.user_id
+      )
+    `);
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -102,9 +120,14 @@ export class Leaderboard extends DurableObject {
     if (request.method === "GET" && url.pathname === "/leaderboard") {
       const me = this.getPlayer(userId);
       if (me == null) {
-        return Response.json({ me: null, friends: [] });
+        return Response.json({ me: null, friends: [], incoming: [], outgoing: [] });
       }
-      return Response.json({ me, friends: this.getFriends(userId) });
+      return Response.json({
+        me,
+        friends: this.getFriends(userId),
+        incoming: this.getRequests(userId, "in"),
+        outgoing: this.getRequests(userId, "out"),
+      });
     }
 
     // Score updates ratchet upward; the newest name and mark always stick.
@@ -122,6 +145,8 @@ export class Leaderboard extends DurableObject {
       return Response.json({ ok: true, points });
     }
 
+    // Offering a code sends an invite. If the other side already offered
+    // theirs, the glasses clink and the friendship is confirmed at once.
     if (request.method === "POST" && url.pathname === "/leaderboard/friends") {
       const body = (await request.json().catch(() => ({}))) as { code?: string };
       const code = (body.code ?? "").trim().toUpperCase();
@@ -132,15 +157,34 @@ export class Leaderboard extends DurableObject {
       if (friend.id === userId) {
         return Response.json({ error: "self" }, { status: 400 });
       }
+      if (this.areFriends(userId, friend.id)) {
+        return Response.json({ ok: true, status: "confirmed", friend });
+      }
+      if (this.hasRequest(friend.id, userId)) {
+        this.confirmFriendship(userId, friend.id);
+        return Response.json({ ok: true, status: "confirmed", friend });
+      }
       this.ctx.storage.sql.exec(
-        "INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO requests (from_id, to_id, created_at) VALUES (?, ?, ?)",
         userId,
         friend.id,
         Date.now(),
       );
+      return Response.json({ ok: true, status: "pending", friend });
+    }
+
+    // Accepting an invite clinks the glasses: both sides land on both boards.
+    if (request.method === "POST" && url.pathname === "/leaderboard/friends/accept") {
+      const body = (await request.json().catch(() => ({}))) as { id?: string };
+      const fromId = body.id ?? "";
+      if (!this.hasRequest(fromId, userId)) {
+        return Response.json({ error: "no-request" }, { status: 404 });
+      }
+      this.confirmFriendship(userId, fromId);
+      const friend = this.getPlayer(fromId);
       return Response.json({
         ok: true,
-        friend: {
+        friend: friend && {
           id: friend.id,
           name: friend.name,
           points: friend.points,
@@ -149,12 +193,28 @@ export class Leaderboard extends DurableObject {
       });
     }
 
+    // Passing on an invite, or taking one back — either direction dissolves it.
+    if (request.method === "DELETE" && url.pathname === "/leaderboard/friends/requests") {
+      const otherId = url.searchParams.get("id") ?? "";
+      this.ctx.storage.sql.exec(
+        "DELETE FROM requests WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)",
+        userId,
+        otherId,
+        otherId,
+        userId,
+      );
+      return Response.json({ ok: true });
+    }
+
     if (request.method === "DELETE" && url.pathname === "/leaderboard/friends") {
       const friendId = url.searchParams.get("id") ?? "";
+      // Removing a friend removes the clink for both sides.
       this.ctx.storage.sql.exec(
-        "DELETE FROM friends WHERE user_id = ? AND friend_id = ?",
+        "DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
         userId,
         friendId,
+        friendId,
+        userId,
       );
       return Response.json({ ok: true });
     }
@@ -184,6 +244,66 @@ export class Leaderboard extends DurableObject {
          FROM friends f JOIN players p ON p.id = f.friend_id
          WHERE f.user_id = ?
          ORDER BY p.points DESC, p.name ASC`,
+        userId,
+      )
+      .toArray();
+  }
+
+  /** True once both sides hold a friends row — a confirmed clink. */
+  private areFriends(userId: string, friendId: string): boolean {
+    return (
+      this.ctx.storage.sql
+        .exec(
+          "SELECT 1 FROM friends WHERE (user_id = ? AND friend_id = ?) AND EXISTS (SELECT 1 FROM friends WHERE user_id = ? AND friend_id = ?)",
+          userId,
+          friendId,
+          friendId,
+          userId,
+        )
+        .toArray()
+        .length > 0
+    );
+  }
+
+  private hasRequest(fromId: string, toId: string): boolean {
+    return (
+      this.ctx.storage.sql
+        .exec("SELECT 1 FROM requests WHERE from_id = ? AND to_id = ?", fromId, toId)
+        .toArray().length > 0
+    );
+  }
+
+  /** Seals a friendship in both directions and sweeps away any invites. */
+  private confirmFriendship(aId: string, bId: string): void {
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) VALUES (?, ?, ?), (?, ?, ?)",
+      aId,
+      bId,
+      now,
+      bId,
+      aId,
+      now,
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM requests WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)",
+      aId,
+      bId,
+      bId,
+      aId,
+    );
+  }
+
+  /** Pending invites toward ("in") or away from ("out") this player. */
+  private getRequests(userId: string, direction: "in" | "out"): PlayerRow[] {
+    const joinColumn = direction === "in" ? "r.from_id" : "r.to_id";
+    const filterColumn = direction === "in" ? "r.to_id" : "r.from_id";
+    return this.ctx.storage.sql
+      .exec<PlayerRow>(
+        `SELECT p.id, p.name, p.code, p.points, p.avatar
+         FROM requests r JOIN players p ON p.id = ${joinColumn}
+         WHERE ${filterColumn} = ?
+         ORDER BY r.created_at ASC`,
         userId,
       )
       .toArray();

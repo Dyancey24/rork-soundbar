@@ -330,6 +330,8 @@ private fun AppShell(
                     isLoading = state.isLeaderboardLoading,
                     onRefresh = viewModel::loadLeaderboard,
                     onAddFriend = viewModel::addFriend,
+                    onAcceptInvite = viewModel::acceptInvite,
+                    onDeclineInvite = viewModel::declineInvite,
                     onRemoveFriend = viewModel::removeFriend,
                     onBack = { navController.popBackStack() },
                     onSignIn = { navController.navigate("signin") },
