@@ -1,8 +1,12 @@
 package com.rork.soundbar.data
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.nearby.Nearby
@@ -77,7 +81,7 @@ class GuestExchange(
 
     /** Starts advertising and listening. Reports UNAVAILABLE when the device can't. */
     fun start(initial: Blend?) {
-        if (!isAvailable) {
+        if (!isAvailable || missingPermissions(appContext).isNotEmpty()) {
             onStateChanged(State.UNAVAILABLE)
             return
         }
@@ -86,7 +90,8 @@ class GuestExchange(
             connections.startAdvertising(localName, SERVICE_ID, connectionLifecycle, adOptions)
             connections.startDiscovery(SERVICE_ID, discoveryCallback, discoveryOptions)
             onStateChanged(State.RUNNING)
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
+            // No usable radio (Bluetooth/Wi-Fi off or missing) — sharing can't run.
             onStateChanged(State.UNAVAILABLE)
         }
     }
@@ -113,7 +118,7 @@ class GuestExchange(
             connections.stopAdvertising()
             connections.stopDiscovery()
             connections.stopAllEndpoints()
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
             // Permissions were revoked mid-flight; the endpoints are gone regardless.
         }
         connected.clear()
@@ -161,8 +166,8 @@ class GuestExchange(
             main.post {
                 try {
                     connections.requestConnection(localName, endpointId, connectionLifecycle)
-                } catch (e: SecurityException) {
-                    // Missing runtime permissions; sharing is effectively down.
+                } catch (e: Exception) {
+                    // Permissions revoked or radio gone mid-flight; sharing is effectively down.
                 }
             }
         }
@@ -200,10 +205,29 @@ class GuestExchange(
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) = Unit
     }
 
-    private companion object {
-        const val SERVICE_ID = "com.rork.soundbar"
+    companion object {
+        private const val SERVICE_ID = "com.rork.soundbar"
 
         private val random = SecureRandom()
+
+        /** The radio permissions the exchange needs on this OS version. */
+        fun requiredPermissions(): List<String> = if (Build.VERSION.SDK_INT >= 31) {
+            buildList {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        } else {
+            listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+
+        /** Which of the required permissions the app is still missing. */
+        fun missingPermissions(context: Context): List<String> = requiredPermissions().filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
 
         fun randomToken(length: Int): String {
             val chars = "abcdefghijklmnopqrstuvwxyz0123456789"

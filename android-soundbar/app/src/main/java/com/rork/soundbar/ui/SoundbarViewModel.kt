@@ -681,7 +681,11 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         _uiState.update {
             it.copy(
                 isSharing = state == GuestExchange.State.RUNNING,
-                isSharingAvailable = if (state == GuestExchange.State.UNAVAILABLE) false else it.isSharingAvailable
+                isSharingAvailable = when (state) {
+                    GuestExchange.State.RUNNING -> true
+                    GuestExchange.State.UNAVAILABLE -> false
+                    GuestExchange.State.STOPPED -> it.isSharingAvailable
+                }
             )
         }
     }

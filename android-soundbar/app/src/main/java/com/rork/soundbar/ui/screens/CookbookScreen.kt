@@ -1,10 +1,5 @@
 package com.rork.soundbar.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -39,7 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,7 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import com.rork.soundbar.ui.components.SharingSwitch
 import com.rork.soundbar.data.ArtistBook
 import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
@@ -256,19 +250,6 @@ private fun SharingCard(
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
-    val context = LocalContext.current
-    val permissions = remember {
-        if (Build.VERSION.SDK_INT >= 31) {
-            arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
-        } else {
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { grants ->
-        if (grants.values.all { it }) onSetSharing(true)
-    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -291,23 +272,9 @@ private fun SharingCard(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f)
                 )
-                Switch(
+                SharingSwitch(
                     checked = isSharing,
-                    onCheckedChange = { checked ->
-                        if (!checked) {
-                            onSetSharing(false)
-                        } else {
-                            val missing = permissions.filter {
-                                ContextCompat.checkSelfPermission(context, it) !=
-                                    PackageManager.PERMISSION_GRANTED
-                            }
-                            if (missing.isEmpty()) {
-                                onSetSharing(true)
-                            } else {
-                                permissionLauncher.launch(missing.toTypedArray())
-                            }
-                        }
-                    }
+                    onChecked = onSetSharing
                 )
             }
             Text(

@@ -27,7 +27,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +52,7 @@ import com.rork.soundbar.ui.components.AvatarArt
 import com.rork.soundbar.ui.components.ConceptToggle
 import com.rork.soundbar.ui.components.HairlineDivider
 import com.rork.soundbar.ui.components.SectionTitle
+import com.rork.soundbar.ui.components.SharingSwitch
 import com.rork.soundbar.ui.theme.LocalConcept
 import java.util.Locale
 
@@ -705,9 +705,9 @@ private fun SettingsCard(
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
-                Switch(
+                SharingSwitch(
                     checked = isSharing,
-                    onCheckedChange = onSetSharing,
+                    onChecked = onSetSharing,
                     enabled = isSharingAvailable,
                     modifier = Modifier.padding(start = 12.dp)
                 )
