@@ -45,7 +45,10 @@ data class AuthUser(
 /** Where the app stands with the door. */
 sealed interface AuthState {
     data object SignedOut : AuthState
-    data class InProgress(val provider: AuthProvider) : AuthState
+    /** A door is open; [provider] is null while an email sign-in runs. */
+    data class InProgress(val provider: AuthProvider?) : AuthState
+    /** Signed up, but the account needs the confirmation link from the inbox first. */
+    data class EmailConfirmationPending(val email: String) : AuthState
     data class Failed(val message: String) : AuthState
     data class SignedIn(val user: AuthUser) : AuthState
 }
@@ -57,9 +60,10 @@ enum class AuthProvider(val wireId: String, val displayName: String) {
 }
 
 /**
- * Owns the sign-in session: opens the OAuth door in a browser tab, catches the
- * redirect back into the app, trades the code for tokens over PKCE, and
- * remembers the user between launches. Tokens live in encrypted preferences.
+ * Owns the sign-in session against Supabase Auth: email + password accounts
+ * sign up and sign in straight over the auth REST API, while Google/Apple go
+ * through the browser with a PKCE exchange and return to the app's deep link.
+ * Tokens live in encrypted preferences and the session refreshes on demand.
  */
 class AuthManager private constructor(context: Context) {
 
@@ -85,7 +89,6 @@ class AuthManager private constructor(context: Context) {
 
     private var pendingProvider: AuthProvider? = null
     private var pendingVerifier: String? = null
-    private var pendingState: String? = null
 
     init {
         val id = prefs.getString(KEY_USER_ID, null)
@@ -100,90 +103,126 @@ class AuthManager private constructor(context: Context) {
         }
     }
 
+    /** Creates an email account. Confirmed accounts sign straight in. */
+    fun signUpWithEmail(email: String, password: String) {
+        if (_state.value is AuthState.InProgress) return
+        val trimmed = email.trim()
+        _state.value = AuthState.InProgress(provider = null)
+        scope.launch {
+            try {
+                val body = buildJsonObject {
+                    put("email", trimmed)
+                    put("password", password)
+                }.toString()
+                val response = http.post("${AuthConfig.SUPABASE_URL}/auth/v1/signup") {
+                    apiKeyHeaders()
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+                val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+                if (!response.status.isSuccess()) {
+                    _state.value = AuthState.Failed(signUpError(payload))
+                    return@launch
+                }
+                val session = payload["access_token"]?.jsonPrimitive?.contentOrNull
+                if (session.isNullOrBlank()) {
+                    // Confirmation required — the account exists but waits for the inbox link.
+                    _state.value = AuthState.EmailConfirmationPending(trimmed)
+                    return@launch
+                }
+                signInFromSession(payload)
+            } catch (error: Exception) {
+                Log.w(TAG, "Email sign-up failed")
+                _state.value = AuthState.Failed("Couldn't reach the door — check your connection and try again.")
+            }
+        }
+    }
+
+    /** Signs an existing email account in. */
+    fun signInWithEmail(email: String, password: String) {
+        if (_state.value is AuthState.InProgress) return
+        _state.value = AuthState.InProgress(provider = null)
+        scope.launch {
+            try {
+                val body = buildJsonObject {
+                    put("email", email.trim())
+                    put("password", password)
+                }.toString()
+                val response = http.post("${AuthConfig.SUPABASE_URL}/auth/v1/token?grant_type=password") {
+                    apiKeyHeaders()
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+                val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+                if (!response.status.isSuccess()) {
+                    _state.value = AuthState.Failed(signInError(payload))
+                    return@launch
+                }
+                signInFromSession(payload)
+            } catch (error: Exception) {
+                Log.w(TAG, "Email sign-in failed")
+                _state.value = AuthState.Failed("Couldn't reach the door — check your connection and try again.")
+            }
+        }
+    }
+
     /** Opens the OAuth door for the chosen provider in a browser tab. */
     fun signIn(provider: AuthProvider) {
         if (_state.value is AuthState.InProgress) return
         val verifier = newToken()
         pendingProvider = provider
         pendingVerifier = verifier
-        pendingState = newToken(length = 16)
         _state.value = AuthState.InProgress(provider)
-        scope.launch {
-            try {
-                val body = buildJsonObject {
-                    put("app_key", AuthConfig.APP_KEY)
-                    put("provider", provider.wireId)
-                    put("code_challenge", challengeFor(verifier))
-                    put("target", "rn")
-                    put("env", "native")
-                }.toString()
-                val response = http.post("${AuthConfig.AUTH_URL}/oauth/initiate") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
-                val authUrl = Json.parseToJsonElement(response.bodyAsText())
-                    .jsonObject["auth_url"]?.jsonPrimitive?.contentOrNull
-                if (authUrl.isNullOrBlank()) throw IllegalStateException("no auth_url")
-                withContext(Dispatchers.Main) { openBrowser(authUrl) }
-            } catch (error: Exception) {
-                Log.w(TAG, "Sign-in could not start")
-                _state.value = AuthState.Failed(
-                    "The door wouldn't open — check your connection and try again."
-                )
-            }
-        }
+        val authorizeUrl = Uri.parse("${AuthConfig.SUPABASE_URL}/auth/v1/authorize").buildUpon()
+            .appendQueryParameter("provider", provider.wireId)
+            .appendQueryParameter("redirect_to", callbackUrl())
+            .appendQueryParameter("code_challenge", challengeFor(verifier))
+            .appendQueryParameter("code_challenge_method", "s256")
+            .appendQueryParameter("apikey", AuthConfig.SUPABASE_ANON_KEY)
+            .build()
+        withMain { openBrowser(authorizeUrl.toString()) }
     }
 
     /** Catches the redirect back into the app and trades the code for tokens. */
     fun handleCallback(uri: Uri) {
         if (_state.value !is AuthState.InProgress) return
-        val provider = pendingProvider ?: return
+        val verifier = pendingVerifier ?: return
         uri.getQueryParameter("error")?.let {
+            pendingProvider = null
+            pendingVerifier = null
             _state.value = AuthState.Failed("Sign-in was cancelled.")
             return
         }
         val code = uri.getQueryParameter("code")
-        val returnedState = uri.getQueryParameter("state")
-        val verifier = pendingVerifier
-        if (code.isNullOrBlank() || verifier == null || returnedState != pendingState) {
+        if (code.isNullOrBlank()) {
+            pendingProvider = null
+            pendingVerifier = null
             _state.value = AuthState.Failed("Sign-in couldn't be verified. Please try again.")
             return
         }
         scope.launch {
             try {
                 val body = buildJsonObject {
-                    put("app_key", AuthConfig.APP_KEY)
-                    put("code", code)
+                    put("auth_code", code)
                     put("code_verifier", verifier)
                 }.toString()
-                val response = http.post("${AuthConfig.AUTH_URL}/oauth/token") {
+                val response = http.post("${AuthConfig.SUPABASE_URL}/auth/v1/token?grant_type=pkce") {
+                    apiKeyHeaders()
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
                 val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-                val user = payload["user"] as? JsonObject
-                    ?: throw IllegalStateException("no user in token response")
-                val signedIn = AuthUser(
-                    id = user.str("id") ?: user.str("sub") ?: "",
-                    name = user.str("name")
-                        ?: user.str("email")?.substringBefore('@')
-                        ?: provider.displayName + " guest",
-                    email = user.str("email")
-                )
-                prefs.edit()
-                    .putString(KEY_USER_ID, signedIn.id)
-                    .putString(KEY_USER_NAME, signedIn.name)
-                    .putString(KEY_USER_EMAIL, signedIn.email)
-                    .putString(KEY_ACCESS_TOKEN, payload.str("access_token"))
-                    .putString(KEY_REFRESH_TOKEN, payload.str("refresh_token"))
-                    .apply()
-                pendingProvider = null
-                pendingVerifier = null
-                pendingState = null
-                _state.value = AuthState.SignedIn(signedIn)
+                if (!response.status.isSuccess()) {
+                    _state.value = AuthState.Failed("Sign-in couldn't be completed. Please try again.")
+                    return@launch
+                }
+                signInFromSession(payload)
             } catch (error: Exception) {
                 Log.w(TAG, "Token exchange failed")
                 _state.value = AuthState.Failed("Sign-in couldn't be completed. Please try again.")
+            } finally {
+                pendingProvider = null
+                pendingVerifier = null
             }
         }
     }
@@ -199,17 +238,20 @@ class AuthManager private constructor(context: Context) {
         val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return false
         return try {
             val body = buildJsonObject {
-                put("app_key", AuthConfig.APP_KEY)
                 put("refresh_token", refreshToken)
             }.toString()
-            val response = http.post("${AuthConfig.AUTH_URL}/oauth/refresh") {
+            val response = http.post("${AuthConfig.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token") {
+                apiKeyHeaders()
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
             if (!response.status.isSuccess()) return false
-            val token = Json.parseToJsonElement(response.bodyAsText())
-                .jsonObject.str("access_token") ?: return false
-            prefs.edit().putString(KEY_ACCESS_TOKEN, token).apply()
+            val payload = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val access = payload.str("access_token") ?: return false
+            prefs.edit()
+                .putString(KEY_ACCESS_TOKEN, access)
+                .putString(KEY_REFRESH_TOKEN, payload.str("refresh_token") ?: refreshToken)
+                .apply()
             true
         } catch (error: Exception) {
             Log.w(TAG, "Token refresh failed")
@@ -219,11 +261,70 @@ class AuthManager private constructor(context: Context) {
 
     /** Clears the session; the shelf itself keeps waiting on this device. */
     fun signOut() {
+        val token = prefs.getString(KEY_ACCESS_TOKEN, null)
+        if (token != null) {
+            scope.launch {
+                // Best effort — the local session is cleared regardless.
+                runCatching {
+                    http.post("${AuthConfig.SUPABASE_URL}/auth/v1/logout") {
+                        apiKeyHeaders()
+                        setBody("")
+                    }
+                }
+            }
+        }
         prefs.edit().clear().apply()
         pendingProvider = null
         pendingVerifier = null
-        pendingState = null
         _state.value = AuthState.SignedOut
+    }
+
+    private fun signInFromSession(payload: JsonObject) {
+        val user = payload["user"] as? JsonObject
+            ?: throw IllegalStateException("no user in session response")
+        val meta = user["user_metadata"] as? JsonObject
+        val email = user.str("email")
+        val signedIn = AuthUser(
+            id = user.str("id") ?: "",
+            name = meta?.str("name")
+                ?: meta?.str("full_name")
+                ?: meta?.str("user_name")
+                ?: email?.substringBefore('@')
+                ?: "Guest",
+            email = email
+        )
+        prefs.edit()
+            .putString(KEY_USER_ID, signedIn.id)
+            .putString(KEY_USER_NAME, signedIn.name)
+            .putString(KEY_USER_EMAIL, signedIn.email)
+            .putString(KEY_ACCESS_TOKEN, payload.str("access_token") ?: "")
+            .putString(KEY_REFRESH_TOKEN, payload.str("refresh_token"))
+            .apply()
+        _state.value = AuthState.SignedIn(signedIn)
+    }
+
+    private fun signUpError(payload: JsonObject): String = when (payload.str("error_code")) {
+        "user_already_exists", "email_exists" -> "That email already has an account — sign in instead."
+        "weak_password" -> "Choose a longer password — at least 6 characters."
+        "validation_failed" -> "That email doesn't look right — check it and try again."
+        else -> "Sign-up couldn't be completed. Please try again."
+    }
+
+    private fun signInError(payload: JsonObject): String = when (payload.str("error_code")) {
+        "email_not_confirmed" -> "Confirm your email first — tap the link we sent you."
+        "invalid_credentials", "invalid_grant" -> "Wrong email or password — try again."
+        else -> "Wrong email or password — try again."
+    }
+
+    private fun callbackUrl(): String =
+        "${AuthConfig.CALLBACK_SCHEME}://${AuthConfig.CALLBACK_HOST}${AuthConfig.CALLBACK_PATH}"
+
+    private fun io.ktor.client.request.HttpRequestBuilder.apiKeyHeaders() {
+        headers.append("apikey", AuthConfig.SUPABASE_ANON_KEY)
+    }
+
+    private fun withMain(block: () -> Unit) {
+        scope.launch { withContext(Dispatchers.Main) { block() } }
     }
 
     private fun openBrowser(url: String) {

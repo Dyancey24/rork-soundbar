@@ -1,12 +1,13 @@
 package com.rork.soundbar.data
 
 /**
- * Rork Auth's public client values — provisioned by Rork and safe to embed.
- * The callback scheme doubles as the manifest deep link the browser returns to.
+ * Public client values — safe to embed. Sessions are issued by Supabase Auth
+ * (email + password, or Google/Apple OAuth over PKCE); the callback scheme
+ * doubles as the manifest deep link the browser returns to.
  */
 object AuthConfig {
-    const val APP_KEY = "rpk_jlhna1b2zsp5zlwkx0o86hilh0xng47z"
-    const val AUTH_URL = "https://api.rork.com"
+    const val SUPABASE_URL = "https://lqttmgwoslgksvenpjjl.supabase.co"
+    const val SUPABASE_ANON_KEY = "sb_publishable_1BrAevm9i1dNsh2HpxuhIw_03y6Llct"
     const val CALLBACK_SCHEME = "rork-wm7dwkmg7ky73dvhk1cpw"
     const val CALLBACK_HOST = "auth"
     const val CALLBACK_PATH = "/callback"

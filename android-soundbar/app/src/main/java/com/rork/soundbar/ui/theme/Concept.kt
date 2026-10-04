@@ -137,6 +137,25 @@ enum class Concept(val id: String) {
         } else {
             "Create an account or sign in — your pantry, your recipes, and your notes are kept waiting for you."
         }
+    val authDividerLabel: String get() = "or with email"
+    val authEmailLabel: String get() = "Email"
+    val authPasswordLabel: String get() = "Password"
+    val authSignInButton: String get() = "Sign in"
+    val authSignUpButton: String get() = "Create account"
+    val authToggleSignUpLabel: String
+        get() = if (this == BAR) {
+            "New at the bar? Create an account"
+        } else {
+            "New to the kitchen? Create an account"
+        }
+    val authToggleSignInLabel: String
+        get() = if (this == BAR) {
+            "Already a regular? Sign in"
+        } else {
+            "Already cook here? Sign in"
+        }
+    fun authCheckInboxMessage(email: String): String =
+        "We sent a confirmation link to $email — tap it, then sign in here."
     val playLabel: String get() = if (this == BAR) "Play the blend" else "Play the dish"
     val pauseLabel: String get() = if (this == BAR) "Pause the blend" else "Pause the dish"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"

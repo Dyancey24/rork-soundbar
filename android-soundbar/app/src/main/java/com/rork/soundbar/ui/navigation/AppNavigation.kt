@@ -149,6 +149,9 @@ fun AppNavigation() {
                 authState = authState,
                 account = (authState as? AuthState.SignedIn)?.user,
                 onSignIn = auth::signIn,
+                onEmailSubmit = { isSignUp, email, password ->
+                    if (isSignUp) auth.signUpWithEmail(email, password) else auth.signInWithEmail(email, password)
+                },
                 onSignOut = auth::signOut
             )
         }
@@ -162,6 +165,7 @@ private fun AppShell(
     authState: AuthState,
     account: AuthUser?,
     onSignIn: (AuthProvider) -> Unit,
+    onEmailSubmit: (isSignUp: Boolean, email: String, password: String) -> Unit,
     onSignOut: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -247,6 +251,7 @@ private fun AppShell(
                 SignInScreen(
                     state = authState,
                     onSignIn = onSignIn,
+                    onEmailSubmit = onEmailSubmit,
                     onBack = { navController.popBackStack() }
                 )
             }
