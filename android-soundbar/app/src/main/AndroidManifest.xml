@@ -67,6 +67,16 @@
                     android:host="auth"
                     android:pathPrefix="/callback" />
             </intent-filter>
+            <!-- Spotify's consent screen returns here after the PKCE handshake. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.rork.soundbar"
+                    android:host="spotify"
+                    android:pathPrefix="/callback" />
+            </intent-filter>
         </activity>
     </application>
 

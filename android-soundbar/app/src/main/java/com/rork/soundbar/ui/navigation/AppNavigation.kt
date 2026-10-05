@@ -379,7 +379,9 @@ private fun AppShell(
                         onBack = { navController.popBackStack() },
                         onPlayTrack = { index -> viewModel.playBlend(blend, index) },
                         onTogglePlay = viewModel::togglePlayPause,
-                        onToggleSave = { viewModel.toggleShelf(blend) }
+                        onToggleSave = { viewModel.toggleShelf(blend) },
+                        isQueueing = state.isPouring,
+                        onQueueSpotify = { viewModel.pourToSpotify(blend) }
                     )
                 }
             }

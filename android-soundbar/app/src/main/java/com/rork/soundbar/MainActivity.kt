@@ -10,6 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.rork.soundbar.data.AuthConfig
 import com.rork.soundbar.data.AuthManager
+import com.rork.soundbar.data.SpotifyConfig
+import com.rork.soundbar.data.SpotifyManager
 import com.rork.soundbar.ui.navigation.AppNavigation
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +40,11 @@ class MainActivity : ComponentActivity() {
             data.path == AuthConfig.CALLBACK_PATH
         ) {
             AuthManager.get(applicationContext).handleCallback(data)
+        }
+        if (data.scheme == SpotifyConfig.REDIRECT_SCHEME &&
+            data.host == SpotifyConfig.REDIRECT_HOST
+        ) {
+            SpotifyManager.get(applicationContext).handleCallback(data)
         }
     }
 }

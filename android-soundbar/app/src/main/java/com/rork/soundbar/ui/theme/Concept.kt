@@ -158,6 +158,26 @@ enum class Concept(val id: String) {
         "We sent a confirmation link to $email — tap it, then sign in here."
     val playLabel: String get() = if (this == BAR) "Play the blend" else "Play the dish"
     val pauseLabel: String get() = if (this == BAR) "Pause the blend" else "Pause the dish"
+    val spotifyQueueLabel: String
+        get() = if (this == BAR) "Line up on Spotify" else "Send the menu to Spotify"
+    val spotifyConnectFirstMessage: String
+        get() = if (this == BAR) {
+            "Connect your Spotify first — one tap, and the round lines up in your player."
+        } else {
+            "Connect your Spotify first — one tap, and the menu lines up in your player."
+        }
+    fun spotifyQueuedMessage(queued: Int): String =
+        if (this == BAR) {
+            "The round is lined up on Spotify — $queued tracks pouring in your player."
+        } else {
+            "The menu is lined up on Spotify — $queued tracks playing in your player."
+        }
+    val spotifyNoDeviceMessage: String
+        get() = "Spotify isn't awake anywhere — open it on any device, then line it up again."
+    val spotifyPremiumMessage: String
+        get() = "Spotify Premium is needed to line the player — the free seat can't queue."
+    val spotifyFailedMessage: String
+        get() = "Spotify didn't take the order — try again in a moment."
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"

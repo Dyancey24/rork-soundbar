@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -87,6 +89,8 @@ fun DishScreen(
     onPlayTrack: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onToggleSave: () -> Unit,
+    isQueueing: Boolean,
+    onQueueSpotify: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
@@ -148,9 +152,12 @@ fun DishScreen(
         bottomBar = {
             DishActionBar(
                 playLabel = if (isPlaying) concept.pauseLabel else concept.playLabel,
+                queueLabel = concept.spotifyQueueLabel,
                 savedLabel = if (isSaved) concept.savedLabel else concept.saveLabel,
                 isSaved = isSaved,
+                isQueueing = isQueueing,
                 onPlay = { if (playingTrackIndex != null) onTogglePlay() else onPlayTrack(0) },
+                onQueueSpotify = onQueueSpotify,
                 onToggleSave = onToggleSave
             )
         }
@@ -440,9 +447,12 @@ private fun GarnishOptionRow(
 @Composable
 private fun DishActionBar(
     playLabel: String,
+    queueLabel: String,
     savedLabel: String,
     isSaved: Boolean,
+    isQueueing: Boolean,
     onPlay: () -> Unit,
+    onQueueSpotify: () -> Unit,
     onToggleSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -485,9 +495,40 @@ private fun DishActionBar(
                     )
                 }
                 OutlinedButton(
-                    onClick = onToggleSave,
+                    onClick = onQueueSpotify,
+                    enabled = !isQueueing,
                     modifier = Modifier
                         .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, accent),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = accent)
+                ) {
+                    if (isQueueing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = accent
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.QueueMusic,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Text(
+                        text = queueLabel,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                OutlinedButton(
+                    onClick = onToggleSave,
+                    modifier = Modifier
+                        .width(52.dp)
                         .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, accent),

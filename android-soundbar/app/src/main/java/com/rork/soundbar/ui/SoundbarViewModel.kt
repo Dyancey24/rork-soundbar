@@ -25,6 +25,9 @@ import com.rork.soundbar.data.randomAlias
 import com.rork.soundbar.data.ShelfRepository
 import com.rork.soundbar.data.ShelfState
 import com.rork.soundbar.data.SignatureCraft
+import com.rork.soundbar.data.SpotifyConnection
+import com.rork.soundbar.data.SpotifyManager
+import com.rork.soundbar.data.SpotifyQueueResult
 import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.ui.theme.Concept
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +87,9 @@ data class SoundbarUiState(
     val playback: Playback? = null,
     val isShaking: Boolean = false,
     val selectedPlatform: StreamingPlatform = StreamingPlatform.SPOTIFY,
+    /** The reader's Spotify account, once the PKCE handshake has connected it. */
+    val spotify: SpotifyConnection = SpotifyConnection.Disconnected,
+    val isPouring: Boolean = false,
     val stats: TasteStats = TasteStats(0, 0, 0, 0),
     val isSyncing: Boolean = false,
     /** Rewards ledger: total points, badges with levels, and limited event badges. */
@@ -118,6 +124,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private val auth: AuthManager by lazy { AuthManager.get(getApplication()) }
     private val cloudSync: CloudSync by lazy { CloudSync(auth) }
     private val leaderboardSync: LeaderboardSync by lazy { LeaderboardSync(auth) }
+    private val spotifyManager: SpotifyManager by lazy { SpotifyManager.get(getApplication()) }
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
     private var hasSynced = false
@@ -146,6 +153,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                     syncNow()
                     pushLeaderboardScore()
                 }
+            }
+        }
+
+        // The reader's Spotify connection rides along with the house's own state.
+        syncScope.launch {
+            spotifyManager.state.collect { connection ->
+                _uiState.update { it.copy(spotify = connection) }
             }
         }
     }
@@ -789,6 +803,46 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         platform.launch(getApplication(), blend, trackIndex)
         val verb = if (_uiState.value.concept == Concept.BAR) "Now pouring in" else "Now playing in"
         Toast.makeText(getApplication(), "$verb ${platform.displayName}", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Opens Spotify's consent screen in the browser; the deep link finishes it. */
+    fun connectSpotify() = spotifyManager.startConnect()
+
+    /** Forgets the reader's Spotify tokens. */
+    fun disconnectSpotify() = spotifyManager.disconnect()
+
+    /**
+     * Lines the whole blend up in Spotify's own player queue — every track
+     * matched and handed to the reader's active device. When no account is
+     * connected yet, the first tap starts the consent handshake instead.
+     */
+    fun pourToSpotify(blend: Blend) {
+        if (_uiState.value.isPouring) return
+        if (_uiState.value.spotify !is SpotifyConnection.Connected) {
+            connectSpotify()
+            Toast.makeText(
+                getApplication(),
+                _uiState.value.concept.spotifyConnectFirstMessage,
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        _uiState.update { it.copy(isPouring = true) }
+        syncScope.launch {
+            val outcome = spotifyManager.queueAndPlay(blend.tracks)
+            _uiState.update { it.copy(isPouring = false) }
+            withContext(Dispatchers.Main) {
+                val concept = _uiState.value.concept
+                val message = when (outcome) {
+                    SpotifyQueueResult.QUEUED -> concept.spotifyQueuedMessage(blend.tracks.size)
+                    SpotifyQueueResult.NO_DEVICE -> concept.spotifyNoDeviceMessage
+                    SpotifyQueueResult.NOT_PREMIUM -> concept.spotifyPremiumMessage
+                    SpotifyQueueResult.NEEDS_CONNECT -> concept.spotifyConnectFirstMessage
+                    SpotifyQueueResult.FAILED -> concept.spotifyFailedMessage
+                }
+                Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     fun stopPlayback() {
