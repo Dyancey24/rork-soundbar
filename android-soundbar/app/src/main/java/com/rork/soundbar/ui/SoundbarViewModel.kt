@@ -90,6 +90,8 @@ data class SoundbarUiState(
     /** The reader's Spotify account, once the PKCE handshake has connected it. */
     val spotify: SpotifyConnection = SpotifyConnection.Disconnected,
     val isPouring: Boolean = false,
+    /** The Premium heads-up stands between the reader and Spotify's door. */
+    val isSpotifyPromptVisible: Boolean = false,
     val stats: TasteStats = TasteStats(0, 0, 0, 0),
     val isSyncing: Boolean = false,
     /** Rewards ledger: total points, badges with levels, and limited event badges. */
@@ -805,8 +807,21 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         Toast.makeText(getApplication(), "$verb ${platform.displayName}", Toast.LENGTH_SHORT).show()
     }
 
-    /** Opens Spotify's consent screen in the browser; the deep link finishes it. */
-    fun connectSpotify() = spotifyManager.startConnect()
+    /** Offers the Premium heads-up before Spotify's consent screen opens. */
+    fun connectSpotify() {
+        _uiState.update { it.copy(isSpotifyPromptVisible = true) }
+    }
+
+    /** The reader accepted the Premium note — open Spotify's consent screen. */
+    fun confirmConnectSpotify() {
+        _uiState.update { it.copy(isSpotifyPromptVisible = false) }
+        spotifyManager.startConnect()
+    }
+
+    /** The reader stepped back from the door. */
+    fun dismissSpotifyPrompt() {
+        _uiState.update { it.copy(isSpotifyPromptVisible = false) }
+    }
 
     /** Forgets the reader's Spotify tokens. */
     fun disconnectSpotify() = spotifyManager.disconnect()
@@ -814,17 +829,12 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     /**
      * Lines the whole blend up in Spotify's own player queue — every track
      * matched and handed to the reader's active device. When no account is
-     * connected yet, the first tap starts the consent handshake instead.
+     * connected yet, the Premium heads-up comes before Spotify is ever opened.
      */
     fun pourToSpotify(blend: Blend) {
         if (_uiState.value.isPouring) return
         if (_uiState.value.spotify !is SpotifyConnection.Connected) {
             connectSpotify()
-            Toast.makeText(
-                getApplication(),
-                _uiState.value.concept.spotifyConnectFirstMessage,
-                Toast.LENGTH_SHORT
-            ).show()
             return
         }
         _uiState.update { it.copy(isPouring = true) }

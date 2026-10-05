@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -81,6 +82,9 @@ fun AccountScreen(
     onSetSharing: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    spotifyConnectedName: String?,
+    onConnectSpotify: () -> Unit,
+    onDisconnectSpotify: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenLeaderboard: () -> Unit,
     contentPadding: PaddingValues,
@@ -122,6 +126,14 @@ fun AccountScreen(
                 } else {
                     SignInInvitation(onClick = onSignIn)
                 }
+            }
+
+            item("spotify") {
+                SpotifyCard(
+                    connectedName = spotifyConnectedName,
+                    onConnect = onConnectSpotify,
+                    onDisconnect = onDisconnectSpotify
+                )
             }
 
             item("profile") {
@@ -221,6 +233,89 @@ private fun AccountCard(
             }
             TextButton(onClick = onSignOut) {
                 Text(text = "Sign out", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/**
+ * The Spotify desk: connection status and the way in or out. Connecting hands
+ * the blend's queue to Spotify's own player, which needs a Premium account —
+ * the heads-up shows before the consent screen opens.
+ */
+@Composable
+private fun SpotifyCard(
+    connectedName: String?,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (connectedName != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Outlined.MusicNote,
+                        contentDescription = concept.spotifyAccountTitle,
+                        tint = if (connectedName != null) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = concept.spotifyAccountTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = connectedName?.let { concept.spotifyConnectedAs(it) }
+                        ?: concept.spotifyNotConnectedLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                Text(
+                    text = concept.spotifyAccountHint,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            TextButton(
+                onClick = if (connectedName == null) onConnect else onDisconnect,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Text(
+                    text = if (connectedName == null) {
+                        concept.spotifyConnectLabel
+                    } else {
+                        concept.spotifyDisconnectLabel
+                    },
+                    fontSize = 12.sp
+                )
             }
         }
     }

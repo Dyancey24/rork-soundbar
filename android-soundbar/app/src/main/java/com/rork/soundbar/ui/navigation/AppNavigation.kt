@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.SoupKitchen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -43,6 +44,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +70,7 @@ import com.rork.soundbar.data.AuthManager
 import com.rork.soundbar.data.AuthProvider
 import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.data.AuthUser
+import com.rork.soundbar.data.SpotifyConnection
 import com.rork.soundbar.ui.SoundbarViewModel
 import com.rork.soundbar.ui.components.NowPouringBar
 import com.rork.soundbar.ui.components.NowPouringBarHost
@@ -322,6 +325,9 @@ private fun AppShell(
                     onSetSharing = viewModel::setSharing,
                     onSignIn = { navController.navigate("signin") },
                     onSignOut = onSignOut,
+                    spotifyConnectedName = (state.spotify as? SpotifyConnection.Connected)?.displayName,
+                    onConnectSpotify = viewModel::connectSpotify,
+                    onDisconnectSpotify = viewModel::disconnectSpotify,
                     onOpenProfile = { navController.navigate("profile") },
                     onOpenLeaderboard = { navController.navigate("leaderboard") },
                     contentPadding = padding
@@ -386,6 +392,36 @@ private fun AppShell(
                 }
             }
         }
+    }
+
+    // The Premium heads-up stands between the reader and Spotify's door —
+    // shown wherever the connect flow starts, before any browser opens.
+    if (state.isSpotifyPromptVisible) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSpotifyPrompt,
+            title = {
+                Text(
+                    text = concept.spotifyPremiumTitle,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = concept.spotifyPremiumNotice,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmConnectSpotify) {
+                    Text(text = concept.spotifyPremiumContinueLabel)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSpotifyPrompt) {
+                    Text(text = concept.spotifyPremiumCancelLabel)
+                }
+            }
+        )
     }
 }
 

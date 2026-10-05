@@ -178,6 +178,29 @@ enum class Concept(val id: String) {
         get() = "Spotify Premium is needed to line the player — the free seat can't queue."
     val spotifyFailedMessage: String
         get() = "Spotify didn't take the order — try again in a moment."
+    val spotifyAccountTitle: String get() = "Spotify"
+    val spotifyAccountHint: String
+        get() = if (this == BAR) {
+            "Connect the house to your Spotify so a dish can line up in your own player."
+        } else {
+            "Connect the kitchen to your Spotify so a menu can line up in your own player."
+        }
+    fun spotifyConnectedAs(name: String): String = "Connected as $name"
+    val spotifyNotConnectedLabel: String get() = "Not connected"
+    val spotifyConnectLabel: String get() = "Connect"
+    val spotifyDisconnectLabel: String get() = "Disconnect"
+    val spotifyPremiumTitle: String
+        get() = if (this == BAR) "Before the round starts" else "Before the menu starts"
+    val spotifyPremiumNotice: String
+        get() = if (this == BAR) {
+            "Line-up hands the dish straight to Spotify's own player, and Spotify needs " +
+                "a Premium account to queue and play there. Continue to Spotify to connect?"
+        } else {
+            "Line-up hands the menu straight to Spotify's own player, and Spotify needs " +
+                "a Premium account to queue and play there. Continue to Spotify to connect?"
+        }
+    val spotifyPremiumContinueLabel: String get() = "Continue to Spotify"
+    val spotifyPremiumCancelLabel: String get() = "Not now"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"
