@@ -6,7 +6,7 @@ package com.rork.soundbar.data
  * queuing a blend needs: see the player and line tracks up in it.
  */
 object SpotifyConfig {
-    const val CLIENT_ID = ""
+    const val CLIENT_ID = "adb6b44d1d3e4bccbafa3c9481cbf76b"
     const val REDIRECT_SCHEME = "com.rork.soundbar"
     const val REDIRECT_HOST = "spotify"
     const val REDIRECT_URI = "$REDIRECT_SCHEME://$REDIRECT_HOST/callback"
