@@ -26,11 +26,11 @@ object TrackLibrary {
         ),
         "hiphop" to listOf(
             Track("Nautilus", "Pete Rock", 244, "hiphop"),
-            Track("Accordion", "Madvillain", 118, "hiphop"),
-            Track("Vessels", "Roc Marciano", 202, "hiphop"),
-            Track("Rain Check", "Little Simz", 234, "hiphop"),
-            Track("Brick Body", "Open Mike Eagle", 199, "hiphop"),
-            Track("Nights", "Frank Ocean", 307, "hiphop")
+            Track("Accordion", "Madvillain", 118, "hiphop", isExplicit = true),
+            Track("Vessels", "Roc Marciano", 202, "hiphop", isExplicit = true),
+            Track("Rain Check", "Little Simz", 234, "hiphop", isExplicit = true),
+            Track("Brick Body", "Open Mike Eagle", 199, "hiphop", isExplicit = true),
+            Track("Nights", "Frank Ocean", 307, "hiphop", isExplicit = true)
         ),
         "country" to listOf(
             Track("Pancho and Lefty", "Townes Van Zandt", 269, "country"),
@@ -189,6 +189,9 @@ object TrackLibrary {
             Track("Stark Light", "Lebanon Hanover", 232, "coldwave")
         )
     )
+
+    /** True when the catalogue holds any explicit tracks, so the clean filter has something to do. */
+    val hasExplicit: Boolean = tracks.values.flatten().any { it.isExplicit }
 
     fun forGenre(genreId: String): List<Track> = tracks[genreId] ?: tracks.getValue("jazz")
 }

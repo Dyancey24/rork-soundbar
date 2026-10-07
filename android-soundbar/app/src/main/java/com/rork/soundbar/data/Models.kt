@@ -27,7 +27,9 @@ data class Track(
     val title: String,
     val artist: String,
     val seconds: Int,
-    val genreId: String
+    val genreId: String,
+    /** Flagged on the house catalogue; the clean filter tucks these out of sight. */
+    val isExplicit: Boolean = false
 ) {
     val duration: String
         get() = "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
@@ -45,6 +47,9 @@ data class Blend(
     val garnishes: List<Garnish> = emptyList()
 ) {
     val totalSeconds: Int get() = tracks.sumOf { it.seconds }
+
+    /** True when any song on the list is flagged explicit — the clean filter hides it. */
+    val hasExplicit: Boolean get() = tracks.any { it.isExplicit }
 
     val runtimeLabel: String
         get() {
@@ -144,6 +149,10 @@ data class ShelfState(
     val sharingEnabled: Boolean = false,
     /** The streaming house play presses open; a StreamingPlatform id. */
     val platform: String = "spotify",
+    /** The clean-listening choice: explicit tracks hide from menu, shelf, and skips. */
+    val isExplicitFiltered: Boolean = false,
+    /** The kitchen's soft evening lighting, when the bright morning is too loud. */
+    val isKitchenDark: Boolean = false,
     /** Rewards ledger: points earned, songs heard, albums finished, genre badges minted. */
     val points: Long = 0L,
     val listenedTracks: Set<String> = emptySet(),

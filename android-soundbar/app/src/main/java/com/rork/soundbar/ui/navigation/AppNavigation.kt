@@ -125,16 +125,18 @@ fun AppNavigation() {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val concept = state.concept
 
-    // The bar serves after dark with light status icons; the kitchen flips them.
+    // The bar serves after dark with light status icons; the kitchen flips
+    // them — and its soft evening service dims the icons again.
     val activity = LocalContext.current as? ComponentActivity
-    LaunchedEffect(concept) {
+    LaunchedEffect(concept, state.isKitchenDark) {
+        val darkIcons = concept == Concept.KITCHEN && !state.isKitchenDark
         activity?.enableEdgeToEdge(
-            statusBarStyle = if (concept == Concept.KITCHEN) {
+            statusBarStyle = if (darkIcons) {
                 SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
             } else {
                 SystemBarStyle.dark(Color.TRANSPARENT)
             },
-            navigationBarStyle = if (concept == Concept.KITCHEN) {
+            navigationBarStyle = if (darkIcons) {
                 SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
             } else {
                 SystemBarStyle.dark(Color.TRANSPARENT)
@@ -142,7 +144,7 @@ fun AppNavigation() {
         )
     }
 
-    AppTheme(concept = concept) {
+    AppTheme(concept = concept, isKitchenDark = state.isKitchenDark) {
         CompositionLocalProvider(LocalConcept provides concept) {
             // The house serves every guest right away — signing in is an
             // invitation from the menu, not a door at the entrance.
@@ -241,6 +243,8 @@ private fun AppShell(
                     selectedPlatform = state.selectedPlatform,
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
+                    isExplicitFiltered = state.isExplicitFiltered,
+                    onSetExplicitFilter = viewModel::setExplicitFiltered,
                     accountName = account?.name,
                     onOpenAccount = { navController.navigate("account") },
                     contentPadding = padding
@@ -279,6 +283,8 @@ private fun AppShell(
                     onOpenBlend = ::openDish,
                     onStartMixing = { navController.navigate("mix") },
                     onToggleConcept = viewModel::toggleConcept,
+                    isExplicitFiltered = state.isExplicitFiltered,
+                    onSetExplicitFilter = viewModel::setExplicitFiltered,
                     isSyncing = state.isSyncing,
                     onRefresh = viewModel::refreshFromCloud,
                     contentPadding = padding
@@ -320,6 +326,10 @@ private fun AppShell(
                     selectedPlatform = state.selectedPlatform,
                     onSelectPlatform = viewModel::setPlatform,
                     onToggleConcept = viewModel::toggleConcept,
+                    isExplicitFiltered = state.isExplicitFiltered,
+                    onSetExplicitFilter = viewModel::setExplicitFiltered,
+                    isKitchenDark = state.isKitchenDark,
+                    onSetKitchenDark = viewModel::setKitchenDark,
                     isSharing = state.isSharing,
                     isSharingAvailable = state.isSharingAvailable,
                     onSetSharing = viewModel::setSharing,
@@ -419,6 +429,36 @@ private fun AppShell(
             dismissButton = {
                 TextButton(onClick = viewModel::dismissSpotifyPrompt) {
                     Text(text = concept.spotifyPremiumCancelLabel)
+                }
+            }
+        )
+    }
+
+    // Before the house crosses to the bar, a quick check at the door — the
+    // toggle only proposes the switch; this dialog seals it.
+    if (state.isBarPromptVisible) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissBarSwitch,
+            title = {
+                Text(
+                    text = concept.barSwitchTitle,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = concept.barSwitchNotice,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmBarSwitch) {
+                    Text(text = concept.barSwitchConfirm)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissBarSwitch) {
+                    Text(text = concept.barSwitchCancel)
                 }
             }
         )

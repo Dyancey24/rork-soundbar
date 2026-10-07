@@ -32,7 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rork.soundbar.ui.theme.Concept
 import com.rork.soundbar.ui.theme.EyebrowStyle
 import com.rork.soundbar.ui.theme.Ivory
@@ -152,6 +154,46 @@ fun ConceptToggle(concept: Concept, onToggle: () -> Unit, modifier: Modifier = M
             imageVector = if (concept == Concept.BAR) Icons.Outlined.Restaurant else Icons.Outlined.LocalBar,
             contentDescription = concept.switchLabel,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * The clean-listening chip: the small, always-visible offer to tuck explicit
+ * tracks out of sight, shown wherever the menu or shelf is browsed. Active
+ * fills with the accent so the filtered state reads at a glance.
+ */
+@Composable
+fun CleanFilterChip(
+    active: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(50),
+        color = if (active) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        contentColor = if (active) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
         )
     }
 }

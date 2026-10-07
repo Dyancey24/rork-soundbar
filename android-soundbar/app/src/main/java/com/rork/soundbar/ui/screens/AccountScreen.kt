@@ -28,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -85,6 +86,10 @@ fun AccountScreen(
     spotifyConnectedName: String?,
     onConnectSpotify: () -> Unit,
     onDisconnectSpotify: () -> Unit,
+    isExplicitFiltered: Boolean,
+    onSetExplicitFilter: (Boolean) -> Unit,
+    isKitchenDark: Boolean,
+    onSetKitchenDark: (Boolean) -> Unit,
     onOpenProfile: () -> Unit,
     onOpenLeaderboard: () -> Unit,
     contentPadding: PaddingValues,
@@ -171,6 +176,10 @@ fun AccountScreen(
 
             item("settings") {
                 SettingsCard(
+                    isExplicitFiltered = isExplicitFiltered,
+                    onSetExplicitFilter = onSetExplicitFilter,
+                    isKitchenDark = isKitchenDark,
+                    onSetKitchenDark = onSetKitchenDark,
                     selectedPlatform = selectedPlatform,
                     onSelectPlatform = onSelectPlatform,
                     onToggleConcept = onToggleConcept,
@@ -748,6 +757,10 @@ private fun LeaderboardCard(onOpen: () -> Unit, modifier: Modifier = Modifier) {
 /** The switches of the house: theme, streaming house, and nearby sharing. */
 @Composable
 private fun SettingsCard(
+    isExplicitFiltered: Boolean,
+    onSetExplicitFilter: (Boolean) -> Unit,
+    isKitchenDark: Boolean,
+    onSetKitchenDark: (Boolean) -> Unit,
     selectedPlatform: StreamingPlatform,
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
@@ -776,6 +789,54 @@ private fun SettingsCard(
                     modifier = Modifier.weight(1f)
                 )
                 ConceptToggle(concept = concept, onToggle = onToggleConcept)
+            }
+            HairlineDivider()
+            if (concept == com.rork.soundbar.ui.theme.Concept.KITCHEN) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = concept.kitchenLightsLabel,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = concept.kitchenLightsHint,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Switch(
+                        checked = isKitchenDark,
+                        onCheckedChange = onSetKitchenDark,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+                HairlineDivider()
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = concept.cleanFilterTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = concept.cleanFilterHint,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Switch(
+                    checked = isExplicitFiltered,
+                    onCheckedChange = onSetExplicitFilter,
+                    modifier = Modifier.padding(start = 12.dp)
+                )
             }
             HairlineDivider()
             PlatformRow(

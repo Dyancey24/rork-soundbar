@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
 import com.rork.soundbar.data.StreamingPlatform
+import com.rork.soundbar.ui.components.CleanFilterChip
 import com.rork.soundbar.ui.components.ClassicBlendRow
 import com.rork.soundbar.ui.components.CompactBlendCard
 import com.rork.soundbar.ui.components.ConceptToggle
@@ -54,14 +55,22 @@ fun MenuScreen(
     selectedPlatform: StreamingPlatform,
     onSelectPlatform: (StreamingPlatform) -> Unit,
     onToggleConcept: () -> Unit,
+    isExplicitFiltered: Boolean,
+    onSetExplicitFilter: (Boolean) -> Unit,
     accountName: String?,
     onOpenAccount: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
-    val featured = BlendBar.tonight(concept).first()
-    val alsoTonight = BlendBar.tonight(concept).drop(1)
+    // The clean filter tucks explicit blends out of sight wherever the menu is browsed.
+    val allowed: (Blend) -> Boolean = { !isExplicitFiltered || !it.hasExplicit }
+    val tonight = BlendBar.tonight(concept).filter(allowed)
+    val classics = BlendBar.classics(concept).filter(allowed)
+    val featured = tonight.firstOrNull() ?: BlendBar.tonight(concept).first()
+    val alsoTonight = tonight.drop(1)
+    val hiddenCount = BlendBar.tonight(concept).count { !allowed(it) } +
+        BlendBar.classics(concept).count { !allowed(it) }
 
     fun poursNow(blend: Blend): Boolean = playingBlendId == blend.id && isPlaying
 
@@ -110,6 +119,24 @@ fun MenuScreen(
                 )
             }
 
+            item("clean-filter") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CleanFilterChip(
+                        active = isExplicitFiltered,
+                        label = concept.cleanFilterChip,
+                        onClick = { onSetExplicitFilter(!isExplicitFiltered) }
+                    )
+                    if (hiddenCount > 0) {
+                        Text(
+                            text = concept.cleanHiddenNote(hiddenCount),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 10.dp)
+                        )
+                    }
+                }
+            }
+
             item("tonight-label") {
                 Eyebrow(concept.tonightLabel, modifier = Modifier.padding(top = 8.dp))
             }
@@ -148,7 +175,7 @@ fun MenuScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        BlendBar.classics(concept).forEachIndexed { index, blend ->
+                        classics.forEachIndexed { index, blend ->
                             if (index > 0) {
                                 HairlineDivider(modifier = Modifier.padding(start = 72.dp, end = 16.dp))
                             }

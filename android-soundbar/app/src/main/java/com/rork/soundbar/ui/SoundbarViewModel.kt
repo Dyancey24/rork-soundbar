@@ -29,6 +29,7 @@ import com.rork.soundbar.data.SpotifyConnection
 import com.rork.soundbar.data.SpotifyManager
 import com.rork.soundbar.data.SpotifyQueueResult
 import com.rork.soundbar.data.StreamingPlatform
+import com.rork.soundbar.data.TrackLibrary
 import com.rork.soundbar.ui.theme.Concept
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +93,14 @@ data class SoundbarUiState(
     val isPouring: Boolean = false,
     /** The Premium heads-up stands between the reader and Spotify's door. */
     val isSpotifyPromptVisible: Boolean = false,
+    /** Before the house crosses to the bar, a quick check at the door. */
+    val isBarPromptVisible: Boolean = false,
+    /** The clean-listening choice: explicit tracks hide from menu, shelf, and skips. */
+    val isExplicitFiltered: Boolean = false,
+    /** True once the catalogue actually holds explicit tracks, so the offer is worth showing. */
+    val hasExplicitContent: Boolean = false,
+    /** The kitchen's soft evening lighting, when the bright morning is too loud. */
+    val isKitchenDark: Boolean = false,
     val stats: TasteStats = TasteStats(0, 0, 0, 0),
     val isSyncing: Boolean = false,
     /** Rewards ledger: total points, badges with levels, and limited event badges. */
@@ -134,6 +143,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     init {
         val stored = restore()
         applyStored(stored)
+        // The clean-filter offer only matters once the catalogue holds explicit tracks.
+        _uiState.update { it.copy(hasExplicitContent = TrackLibrary.hasExplicit) }
         // Deal a board name once, on first run — the leaderboard always has
         // something to call this reader before they pick a username.
         if (_uiState.value.profile.boardAlias.isBlank()) {
@@ -183,6 +194,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 signatureBlend = stored.signatureBlend,
                 guests = stored.guestRecipes,
                 selectedPlatform = StreamingPlatform.fromId(stored.platform),
+                isExplicitFiltered = stored.isExplicitFiltered,
+                isKitchenDark = stored.isKitchenDark,
                 points = stored.points,
                 listenedTracks = stored.listenedTracks,
                 completedAlbums = stored.completedAlbums,
@@ -565,9 +578,32 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     // region concept
 
-    /** Swaps the house between the dark bar and the bright kitchen. */
+    /**
+     * Swaps the house between the bright kitchen and the dark bar. The bar is a
+     * different room entirely — lights down, different wood, different words —
+     * so the reader confirms the crossing before it happens.
+     */
     fun toggleConcept() {
-        _uiState.update { it.copy(concept = it.concept.other) }
+        if (_uiState.value.concept == Concept.KITCHEN) {
+            _uiState.update { it.copy(isBarPromptVisible = true) }
+            return
+        }
+        switchConcept(Concept.KITCHEN)
+    }
+
+    /** The reader confirmed the crossing — lights down, the bar opens. */
+    fun confirmBarSwitch() {
+        _uiState.update { it.copy(isBarPromptVisible = false) }
+        switchConcept(Concept.BAR)
+    }
+
+    /** The reader stays in the kitchen after all. */
+    fun dismissBarSwitch() {
+        _uiState.update { it.copy(isBarPromptVisible = false) }
+    }
+
+    private fun switchConcept(target: Concept) {
+        _uiState.update { it.copy(concept = target) }
         persist()
         refreshSignature()
     }
@@ -576,6 +612,20 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     fun setPlatform(platform: StreamingPlatform) {
         if (_uiState.value.selectedPlatform == platform) return
         _uiState.update { it.copy(selectedPlatform = platform) }
+        persist()
+    }
+
+    /** Turns the clean filter on or off — explicit tracks hide everywhere at once. */
+    fun setExplicitFiltered(enabled: Boolean) {
+        if (_uiState.value.isExplicitFiltered == enabled) return
+        _uiState.update { it.copy(isExplicitFiltered = enabled) }
+        persist()
+    }
+
+    /** Dims the kitchen into its soft evening light, or brightens it back. */
+    fun setKitchenDark(dark: Boolean) {
+        if (_uiState.value.isKitchenDark == dark) return
+        _uiState.update { it.copy(isKitchenDark = dark) }
         persist()
     }
 
@@ -752,9 +802,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     fun playBlend(blend: Blend, trackIndex: Int = 0) {
         if (blend.tracks.isEmpty()) return
+        val startIndex = cleanStartIndex(blend, trackIndex)
         _uiState.update { state ->
             state.copy(
-                playback = Playback(blend.id, trackIndex.coerceIn(0, blend.tracks.lastIndex), 0, true),
+                playback = Playback(blend.id, startIndex.coerceIn(0, blend.tracks.lastIndex), 0, true),
                 playCounts = state.playCounts + (blend.id to (state.playCounts[blend.id] ?: 0) + 1),
                 servedBlends = if (state.servedBlends.any { it.id == blend.id } ||
                     BlendBar.findHouseBlend(blend.id, state.concept) != null ||
@@ -778,7 +829,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     fun skipToNext() {
         val playback = _uiState.value.playback ?: return
         val blend = findBlend(playback.blendId) ?: return
-        val next = (playback.trackIndex + 1) % blend.tracks.size
+        val next = neighbourIndex(blend, playback.trackIndex, step = 1)
         _uiState.update { it.copy(playback = playback.copy(trackIndex = next, positionSeconds = 0, isPlaying = true)) }
         startTicker()
     }
@@ -790,9 +841,29 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
             _uiState.update { it.copy(playback = playback.copy(positionSeconds = 0)) }
             return
         }
-        val previous = if (playback.trackIndex == 0) blend.tracks.lastIndex else playback.trackIndex - 1
+        val previous = neighbourIndex(blend, playback.trackIndex, step = -1)
         _uiState.update { it.copy(playback = playback.copy(trackIndex = previous, positionSeconds = 0, isPlaying = true)) }
         startTicker()
+    }
+
+    /**
+     * Where playback may start: with the clean filter on, an explicit opening
+     * track hands the needle to the first song the filter allows.
+     */
+    private fun cleanStartIndex(blend: Blend, requested: Int): Int {
+        val filterOn = _uiState.value.isExplicitFiltered
+        if (!filterOn || blend.tracks.getOrNull(requested)?.isExplicit != true) return requested
+        return blend.tracks.indexOfFirst { !it.isExplicit }.takeIf { it >= 0 } ?: requested
+    }
+
+    /** Steps to the neighbouring song the clean filter allows, wrapping both ways. */
+    private fun neighbourIndex(blend: Blend, from: Int, step: Int): Int {
+        var index = from
+        repeat(blend.tracks.size) {
+            index = (index + step + blend.tracks.size) % blend.tracks.size
+            if (!_uiState.value.isExplicitFiltered || !blend.tracks[index].isExplicit) return index
+        }
+        return index
     }
 
     /**
@@ -1020,6 +1091,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 guestRecipes = state.guests,
                 sharingEnabled = sharingEnabled,
                 platform = state.selectedPlatform.id,
+                isExplicitFiltered = state.isExplicitFiltered,
+                isKitchenDark = state.isKitchenDark,
                 points = state.points,
                 listenedTracks = state.listenedTracks,
                 completedAlbums = state.completedAlbums,

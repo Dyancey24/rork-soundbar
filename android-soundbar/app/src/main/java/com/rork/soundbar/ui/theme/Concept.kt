@@ -201,6 +201,40 @@ enum class Concept(val id: String) {
         }
     val spotifyPremiumContinueLabel: String get() = "Continue to Spotify"
     val spotifyPremiumCancelLabel: String get() = "Not now"
+
+    /** The clean filter: offered in settings, on the menu, and on the shelf. */
+    val cleanFilterTitle: String get() = "Clean listening"
+    val cleanFilterHint: String
+        get() = if (this == BAR) {
+            "Keep explicit tracks off the menu and the shelf."
+        } else {
+            "Keep explicit tracks off the menu and the pantry."
+        }
+    val cleanFilterChip: String
+        get() = if (this == BAR) "Clean pours only" else "Clean plates only"
+    fun cleanHiddenNote(count: Int): String =
+        if (this == BAR) {
+            "$count pours tucked away behind the filter"
+        } else {
+            "$count dishes tucked away behind the filter"
+        }
+
+    /** The kitchen's soft option: a dim evening service instead of bright morning. */
+    val kitchenLightsLabel: String get() = "Soft kitchen lighting"
+    val kitchenLightsHint: String
+        get() = "Serve in the dim, soft-lit evening kitchen instead of the bright morning one."
+
+    /** Before the house crosses to the bar, a quick check at the door. */
+    val barSwitchTitle: String
+        get() = if (this == BAR) "Back to the bar?" else "Head to the bar?"
+    val barSwitchNotice: String
+        get() = if (this == BAR) {
+            "The bar is the after-dark room — espresso dark, lit by gold."
+        } else {
+            "The bar is the after-dark room — espresso dark, lit by gold. The whole house switches over."
+        }
+    val barSwitchConfirm: String get() = "Yes, to the bar"
+    val barSwitchCancel: String get() = "Stay in the kitchen"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"

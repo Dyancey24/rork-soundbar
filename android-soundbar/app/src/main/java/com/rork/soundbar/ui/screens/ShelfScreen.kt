@@ -68,6 +68,7 @@ import com.rork.soundbar.data.Blend
 import com.rork.soundbar.data.BlendBar
 import com.rork.soundbar.data.GenreCatalog
 import com.rork.soundbar.ui.TasteStats
+import com.rork.soundbar.ui.components.CleanFilterChip
 import com.rork.soundbar.ui.components.ConceptToggle
 import com.rork.soundbar.ui.components.IngredientTag
 import com.rork.soundbar.ui.components.SectionTitle
@@ -94,14 +95,18 @@ fun ShelfScreen(
     onOpenBlend: (String) -> Unit,
     onStartMixing: () -> Unit,
     onToggleConcept: () -> Unit,
+    isExplicitFiltered: Boolean,
+    onSetExplicitFilter: (Boolean) -> Unit,
     isSyncing: Boolean,
     onRefresh: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
-    // House recipes re-serve under the current concept; a user's own mixes keep their identity.
+    // House recipes re-serve under the current concept; a user's own mixes keep
+    // their identity. The clean filter tucks explicit blends out of sight.
     val displayShelf = shelf.map { BlendBar.adapt(it, concept) }
+        .filter { !isExplicitFiltered || !it.hasExplicit }
     val regulars = displayShelf.sortedByDescending { playCounts[it.id] ?: 0 }
         .filter { (playCounts[it.id] ?: 0) > 0 }
         .take(SHELF_CAPACITY)
@@ -142,6 +147,24 @@ fun ShelfScreen(
                         )
                     }
                     ConceptToggle(concept = concept, onToggle = onToggleConcept)
+                }
+            }
+
+            item("clean-filter") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CleanFilterChip(
+                        active = isExplicitFiltered,
+                        label = concept.cleanFilterChip,
+                        onClick = { onSetExplicitFilter(!isExplicitFiltered) }
+                    )
+                    if (isExplicitFiltered && displayShelf.size < shelf.size) {
+                        Text(
+                            text = concept.cleanHiddenNote(shelf.size - displayShelf.size),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 10.dp)
+                        )
+                    }
                 }
             }
 
