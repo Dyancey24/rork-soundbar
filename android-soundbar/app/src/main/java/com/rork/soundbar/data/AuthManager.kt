@@ -132,7 +132,7 @@ class AuthManager private constructor(context: Context) {
                 }
                 signInFromSession(payload)
             } catch (error: Exception) {
-                Log.w(TAG, "Email sign-up failed")
+                Log.w(TAG, "Email sign-up failed: ${error.message}", error)
                 _state.value = AuthState.Failed("Couldn't reach the door — check your connection and try again.")
             }
         }
@@ -160,7 +160,7 @@ class AuthManager private constructor(context: Context) {
                 }
                 signInFromSession(payload)
             } catch (error: Exception) {
-                Log.w(TAG, "Email sign-in failed")
+                Log.w(TAG, "Email sign-in failed: ${error.message}", error)
                 _state.value = AuthState.Failed("Couldn't reach the door — check your connection and try again.")
             }
         }
@@ -218,7 +218,7 @@ class AuthManager private constructor(context: Context) {
                 }
                 signInFromSession(payload)
             } catch (error: Exception) {
-                Log.w(TAG, "Token exchange failed")
+                Log.w(TAG, "Token exchange failed: ${error.message}", error)
                 _state.value = AuthState.Failed("Sign-in couldn't be completed. Please try again.")
             } finally {
                 pendingProvider = null
