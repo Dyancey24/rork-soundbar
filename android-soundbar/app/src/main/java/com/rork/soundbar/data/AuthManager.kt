@@ -377,7 +377,8 @@ class AuthManager private constructor(context: Context) {
     private fun signUpError(payload: JsonObject): String = when (payload.str("error_code")) {
         "user_already_exists", "email_exists" -> "That email already has an account — sign in instead."
         "weak_password" -> "Choose a longer password — at least 6 characters."
-        "validation_failed" -> "That email doesn't look right — check it and try again."
+        "validation_failed", "email_address_invalid" -> "That email doesn't look right — check it and try again."
+        "over_email_send_rate_limit" -> "Too many confirmation emails just now — give it a few minutes and try again."
         else -> "Sign-up couldn't be completed. Please try again."
     }
 
