@@ -7,8 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,6 +53,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -78,6 +82,8 @@ import com.rork.soundbar.ui.screens.CookbookScreen
 import com.rork.soundbar.ui.screens.DishScreen
 import com.rork.soundbar.ui.screens.LeaderboardScreen
 import com.rork.soundbar.ui.screens.MenuScreen
+import com.rork.soundbar.ui.screens.formatTimeLeft
+import com.rork.soundbar.ui.screens.rememberTickingNow
 import com.rork.soundbar.ui.screens.MixScreen
 import com.rork.soundbar.ui.screens.ProfileScreen
 import com.rork.soundbar.ui.screens.ShelfScreen
@@ -155,6 +161,8 @@ fun AppNavigation() {
                 onEmailSubmit = { isSignUp, email, password ->
                     if (isSignUp) auth.signUpWithEmail(email, password) else auth.signInWithEmail(email, password)
                 },
+                onRequestDeletion = auth::requestAccountDeletion,
+                onCancelDeletion = auth::cancelAccountDeletion,
                 onSignOut = auth::signOut
             )
         }
@@ -168,6 +176,8 @@ private fun AppShell(
     authState: AuthState,
     account: AuthUser?,
     onEmailSubmit: (isSignUp: Boolean, email: String, password: String) -> Unit,
+    onRequestDeletion: () -> Unit,
+    onCancelDeletion: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -226,10 +236,19 @@ private fun AppShell(
             }
         }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "menu"
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // The prevalent heads-up: this account is on its way out, and the timer runs.
+            if (account?.deletionScheduledAt != null) {
+                DeletionBanner(
+                    scheduledAt = account.deletionScheduledAt,
+                    onUndo = onCancelDeletion,
+                    onOpenAccount = { navController.navigate("account") }
+                )
+            }
+            NavHost(
+                navController = navController,
+                startDestination = "menu"
+            ) {
             composable("menu") {
                 MenuScreen(
                     playingBlendId = playback?.blendId,
@@ -313,6 +332,9 @@ private fun AppShell(
                     accountName = account?.name,
                     accountEmail = account?.email,
                     accountVerified = account?.emailVerified == true,
+                    deletionScheduledAt = account?.deletionScheduledAt,
+                    onRequestDeleteAccount = onRequestDeletion,
+                    onCancelDeleteAccount = onCancelDeletion,
                     points = state.points,
                     genreBadges = state.genreBadges,
                     genreSongs = state.genreSongs,
@@ -398,6 +420,7 @@ private fun AppShell(
                     )
                 }
             }
+        }
         }
     }
 
@@ -582,6 +605,46 @@ private fun MissingBlend(onBack: () -> Unit, modifier: Modifier = Modifier) {
             )
         ) {
             Text("Back to the menu")
+        }
+    }
+}
+
+/** The house-wide notice of a scheduled deletion: countdown, undo, and the way to the desk. */
+@Composable
+private fun DeletionBanner(
+    scheduledAt: Long,
+    onUndo: () -> Unit,
+    onOpenAccount: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    val now = rememberTickingNow()
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onOpenAccount)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = concept.deletionPendingTitle(formatTimeLeft(scheduledAt - now)),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = concept.deletionBannerBody,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                )
+            }
+            TextButton(onClick = onUndo) {
+                Text(text = concept.deletionUndoLabel, fontSize = 12.sp)
+            }
         }
     }
 }

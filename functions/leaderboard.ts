@@ -104,6 +104,22 @@ export class Leaderboard extends DurableObject {
     }
     const fallbackName = request.headers.get("X-Rork-User-Name") ?? "";
 
+    // Account deletion: everything this player left on the board goes.
+    if (request.method === "DELETE" && url.pathname === "/leaderboard/account") {
+      this.ctx.storage.sql.exec("DELETE FROM players WHERE id = ?", userId);
+      this.ctx.storage.sql.exec(
+        "DELETE FROM friends WHERE user_id = ? OR friend_id = ?",
+        userId,
+        userId
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM requests WHERE from_id = ? OR to_id = ?",
+        userId,
+        userId
+      );
+      return Response.json({ ok: true });
+    }
+
     // Register or rename: every sign-in lands here first, so the player row
     // and its friend code exist before anything else reads the board.
     if (request.method === "POST" && url.pathname === "/leaderboard/profile") {

@@ -258,6 +258,45 @@ enum class Concept(val id: String) {
             "Email confirmed — sign in and the kitchen is yours."
         }
     val emailVerifiedBadge: String get() = "Email verified"
+
+    /** The last door: deleting the account, with 48 hours to change course. */
+    val deleteAccountLabel: String
+        get() = if (this == BAR) "Close your tab" else "Delete account"
+    val deleteAccountHint: String
+        get() = if (this == BAR) {
+            "Permanent — the house keeps your tab open for 48 hours in case you change your mind."
+        } else {
+            "Permanent — the kitchen holds your membership for 48 hours in case you change your mind."
+        }
+    val deleteDialogTitle: String
+        get() = if (this == BAR) "Close your tab for good?" else "Delete your account for good?"
+    val deleteDialogBody: String
+        get() = if (this == BAR) {
+            "This permanently deletes your account — points, badges, and everything on your shelf — " +
+                "and it cannot be undone or recovered. Your tab actually closes 48 hours from now; " +
+                "sign back in any time before then to keep it."
+        } else {
+            "This permanently deletes your account — merits, badges, and everything in your pantry — " +
+                "and it cannot be undone or recovered. Your membership actually ends 48 hours from now; " +
+                "sign back in any time before then to keep it."
+        }
+    val deleteDialogConfirm: String get() = "Delete my account"
+    val deleteDialogCancel: String get() = "Keep my account"
+    fun deletionPendingTitle(timeLeft: String): String =
+        if (this == BAR) "Your tab closes in $timeLeft" else "Your account is deleted in $timeLeft"
+    val deletionPendingBody: String
+        get() = if (this == BAR) {
+            "Deletion is scheduled — when the timer ends, everything goes for good. Undo it to keep the tab open."
+        } else {
+            "Deletion is scheduled — when the timer ends, everything goes for good. Undo it to keep the account."
+        }
+    val deletionBannerBody: String
+        get() = if (this == BAR) {
+            "This account is set to close for good — visit the Members' Desk to undo it."
+        } else {
+            "This account is set to be deleted for good — visit the Household Ledger to undo it."
+        }
+    val deletionUndoLabel: String get() = "Undo deletion"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"

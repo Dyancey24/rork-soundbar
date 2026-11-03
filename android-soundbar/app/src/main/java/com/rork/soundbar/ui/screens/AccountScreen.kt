@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -33,7 +35,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,6 +63,7 @@ import com.rork.soundbar.ui.components.HairlineDivider
 import com.rork.soundbar.ui.components.SectionTitle
 import com.rork.soundbar.ui.components.SharingSwitch
 import com.rork.soundbar.ui.theme.LocalConcept
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
@@ -70,6 +77,9 @@ fun AccountScreen(
     accountName: String?,
     accountEmail: String?,
     accountVerified: Boolean,
+    deletionScheduledAt: Long?,
+    onRequestDeleteAccount: () -> Unit,
+    onCancelDeleteAccount: () -> Unit,
     points: Long,
     genreBadges: Set<String>,
     genreSongs: Map<String, Int>,
@@ -98,6 +108,7 @@ fun AccountScreen(
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         BarGlow()
@@ -133,10 +144,18 @@ fun AccountScreen(
                         name = accountName,
                         email = accountEmail,
                         emailVerified = accountVerified,
-                        onSignOut = onSignOut
+                        deletionScheduledAt = deletionScheduledAt,
+                        onSignOut = onSignOut,
+                        onUndoDeletion = onCancelDeleteAccount
                     )
                 } else {
                     SignInInvitation(onClick = onSignIn)
+                }
+            }
+
+            if (signedIn && deletionScheduledAt == null) {
+                item("delete") {
+                    DeleteAccountCard(onClick = { showDeleteDialog = true })
                 }
             }
 
@@ -196,6 +215,41 @@ fun AccountScreen(
                 )
             }
         }
+
+        if (showDeleteDialog) {
+            // The permanent decision, spelled out before anything is asked of the door.
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text(text = concept.deleteDialogTitle) },
+                text = {
+                    Text(
+                        text = concept.deleteDialogBody,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            onRequestDeleteAccount()
+                        }
+                    ) {
+                        Text(
+                            text = concept.deleteDialogConfirm,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text(text = concept.deleteDialogCancel)
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -205,16 +259,20 @@ private fun AccountCard(
     name: String,
     email: String?,
     emailVerified: Boolean,
+    deletionScheduledAt: Long?,
     onSignOut: () -> Unit,
+    onUndoDeletion: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val concept = LocalConcept.current
+    val now = rememberTickingNow()
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier.fillMaxWidth()
     ) {
+        Column {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -262,6 +320,82 @@ private fun AccountCard(
             }
             TextButton(onClick = onSignOut) {
                 Text(text = "Sign out", fontSize = 12.sp)
+            }
+        }
+        if (deletionScheduledAt != null) {
+            // The countdown strip: the tab closes, unless the request is taken back.
+            val timeLeft = formatTimeLeft(deletionScheduledAt - now)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = concept.deletionPendingTitle(timeLeft),
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = concept.deletionPendingBody,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                TextButton(onClick = onUndoDeletion, modifier = Modifier.padding(top = 2.dp)) {
+                    Text(
+                        text = concept.deletionUndoLabel,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+        }
+    }
+}
+
+/** The quiet but unmistakable way out, offered beneath the account plaque. */
+@Composable
+private fun DeleteAccountCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Surface(onClick = onClick, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = concept.deleteAccountLabel,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = concept.deleteAccountHint,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.ChevronRight,
+                    contentDescription = concept.deleteAccountLabel,
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
@@ -890,4 +1024,26 @@ private fun SettingsCard(
             }
         }
     }
+}
+
+/** A wall clock that keeps ticking so countdowns stay honest. */
+@Composable
+internal fun rememberTickingNow(intervalMs: Long = 30_000L): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(intervalMs) {
+        while (true) {
+            delay(intervalMs)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
+}
+
+/** "2 hr 14 min" / "9 min" — the countdown's voice; past due it softens to moments. */
+internal fun formatTimeLeft(millisLeft: Long): String {
+    if (millisLeft <= 0L) return "moments"
+    val totalMinutes = (millisLeft + 59_999L) / 60_000L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return if (hours > 0L) "$hours hr $minutes min" else "$minutes min"
 }

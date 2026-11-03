@@ -13,6 +13,7 @@ import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -43,7 +44,9 @@ data class AuthUser(
     val name: String,
     val email: String?,
     /** True once the address has tapped the confirmation link. */
-    val emailVerified: Boolean = false
+    val emailVerified: Boolean = false,
+    /** Epoch millis when the requested deletion executes; null while the account stays. */
+    val deletionScheduledAt: Long? = null
 )
 
 /** Where the app stands with the door. */
@@ -104,7 +107,8 @@ class AuthManager private constructor(context: Context) {
                     id = id,
                     name = prefs.getString(KEY_USER_NAME, null) ?: "Guest",
                     email = prefs.getString(KEY_USER_EMAIL, null),
-                    emailVerified = prefs.getBoolean(KEY_USER_VERIFIED, false)
+                    emailVerified = prefs.getBoolean(KEY_USER_VERIFIED, false),
+                    deletionScheduledAt = prefs.getString(KEY_DELETION_AT, null)?.toLongOrNull()
                 )
             )
         }
@@ -328,6 +332,41 @@ class AuthManager private constructor(context: Context) {
         }
     }
 
+    /**
+     * Schedules the account for deletion. The house holds everything for a
+     * 48-hour grace — signing back in and undoing keeps it for good.
+     */
+    fun requestAccountDeletion() {
+        val current = (_state.value as? AuthState.SignedIn)?.user ?: return
+        val scheduledAt = System.currentTimeMillis() + GRACE_PERIOD_MS
+        scope.launch {
+            try {
+                updateUserMetadata(buildJsonObject {
+                    put("deletion_scheduled_at", scheduledAt)
+                })
+                updateSignedInUser(current.copy(deletionScheduledAt = scheduledAt))
+            } catch (error: Exception) {
+                Log.w(TAG, "Deletion request failed: ${error.message}", error)
+            }
+        }
+    }
+
+    /** Second thoughts: takes back a pending deletion request. */
+    fun cancelAccountDeletion() {
+        val current = (_state.value as? AuthState.SignedIn)?.user ?: return
+        if (current.deletionScheduledAt == null) return
+        scope.launch {
+            try {
+                updateUserMetadata(buildJsonObject {
+                    put("deletion_scheduled_at", null)
+                })
+                updateSignedInUser(current.copy(deletionScheduledAt = null))
+            } catch (error: Exception) {
+                Log.w(TAG, "Deletion cancel failed: ${error.message}", error)
+            }
+        }
+    }
+
     /** Clears the session; the shelf itself keeps waiting on this device. */
     fun signOut() {
         val token = prefs.getString(KEY_ACCESS_TOKEN, null)
@@ -348,6 +387,28 @@ class AuthManager private constructor(context: Context) {
         _state.value = AuthState.SignedOut
     }
 
+    /** Updates the signed-in user's metadata over the auth API. */
+    private suspend fun updateUserMetadata(data: JsonObject) {
+        val token = accessToken() ?: throw IllegalStateException("not signed in")
+        val response = http.put("${AuthConfig.SUPABASE_URL}/auth/v1/user") {
+            apiKeyHeaders()
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("data", data) }.toString())
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("metadata update failed: ${'$'}{response.status.value}")
+        }
+    }
+
+    /** Republishes a refreshed account to the session and the encrypted store. */
+    private fun updateSignedInUser(user: AuthUser) {
+        prefs.edit()
+            .putString(KEY_DELETION_AT, user.deletionScheduledAt?.toString())
+            .apply()
+        _state.value = AuthState.SignedIn(user)
+    }
+
     private fun signInFromSession(payload: JsonObject) {
         val user = payload["user"] as? JsonObject
             ?: throw IllegalStateException("no user in session response")
@@ -361,13 +422,15 @@ class AuthManager private constructor(context: Context) {
                 ?: email?.substringBefore('@')
                 ?: "Guest",
             email = email,
-            emailVerified = user["email_confirmed_at"] != null || user["confirmed_at"] != null
+            emailVerified = user["email_confirmed_at"] != null || user["confirmed_at"] != null,
+            deletionScheduledAt = meta?.str("deletion_scheduled_at")?.toLongOrNull()
         )
         prefs.edit()
             .putString(KEY_USER_ID, signedIn.id)
             .putString(KEY_USER_NAME, signedIn.name)
             .putString(KEY_USER_EMAIL, signedIn.email)
             .putBoolean(KEY_USER_VERIFIED, signedIn.emailVerified)
+            .putString(KEY_DELETION_AT, signedIn.deletionScheduledAt?.toString())
             .putString(KEY_ACCESS_TOKEN, payload.str("access_token") ?: "")
             .putString(KEY_REFRESH_TOKEN, payload.str("refresh_token"))
             .apply()
@@ -438,6 +501,10 @@ class AuthManager private constructor(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_VERIFIED = "user_verified"
+        private const val KEY_DELETION_AT = "deletion_at"
+
+        /** How long a requested deletion waits before it goes through. */
+        private const val GRACE_PERIOD_MS = 48L * 60L * 60L * 1000L
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
 
