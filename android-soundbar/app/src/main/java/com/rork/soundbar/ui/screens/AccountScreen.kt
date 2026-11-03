@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -68,6 +69,7 @@ fun AccountScreen(
     signedIn: Boolean,
     accountName: String?,
     accountEmail: String?,
+    accountVerified: Boolean,
     points: Long,
     genreBadges: Set<String>,
     genreSongs: Map<String, Int>,
@@ -127,7 +129,12 @@ fun AccountScreen(
 
             item("account") {
                 if (signedIn && accountName != null) {
-                    AccountCard(name = accountName, email = accountEmail, onSignOut = onSignOut)
+                    AccountCard(
+                        name = accountName,
+                        email = accountEmail,
+                        emailVerified = accountVerified,
+                        onSignOut = onSignOut
+                    )
                 } else {
                     SignInInvitation(onClick = onSignIn)
                 }
@@ -197,9 +204,11 @@ fun AccountScreen(
 private fun AccountCard(
     name: String,
     email: String?,
+    emailVerified: Boolean,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val concept = LocalConcept.current
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -232,12 +241,23 @@ private fun AccountCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 if (!email.isNullOrBlank()) {
-                    Text(
-                        text = email,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = email,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+                        if (emailVerified) {
+                            Icon(
+                                imageVector = Icons.Filled.Verified,
+                                contentDescription = concept.emailVerifiedBadge,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .padding(start = 4.dp)
+                                    .size(14.dp)
+                            )
+                        }
+                    }
                 }
             }
             TextButton(onClick = onSignOut) {

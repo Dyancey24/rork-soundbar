@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -96,6 +100,18 @@ fun SignInScreen(
                 modifier = Modifier.padding(top = 10.dp)
             )
             Spacer(modifier = Modifier.weight(1f))
+            if (state is AuthState.EmailConfirmed) {
+                // The link came home: the address checks out, only the sign-in remains.
+                Text(
+                    text = concept.emailConfirmedBanner,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 14.dp)
+                )
+            }
             failure?.let {
                 Text(
                     text = it.message,
@@ -105,47 +121,42 @@ fun SignInScreen(
                     modifier = Modifier.padding(bottom = 14.dp)
                 )
             }
-            pending?.let {
-                Text(
-                    text = concept.authCheckInboxMessage(it.email),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 14.dp)
-                )
-            }
-            AuthProvider.entries.forEach { provider ->
-                AuthDoorButton(
-                    provider = provider,
-                    isLoading = inProgress?.provider == provider,
+            if (pending != null) {
+                // The inbox holds the last step: the doors give way to the wait.
+                ConfirmationPanel(email = pending.email)
+            } else {
+                AuthProvider.entries.forEach { provider ->
+                    AuthDoorButton(
+                        provider = provider,
+                        isLoading = inProgress?.provider == provider,
+                        enabled = inProgress == null,
+                        onClick = { onSignIn(provider) },
+                        emphasized = provider == AuthProvider.GOOGLE,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                    Text(
+                        text = concept.authDividerLabel,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                }
+                EmailDoor(
+                    isLoading = inProgress != null && inProgress.provider == null,
                     enabled = inProgress == null,
-                    onClick = { onSignIn(provider) },
-                    emphasized = provider == AuthProvider.GOOGLE,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    onEmailSubmit = onEmailSubmit,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f))
-                Text(
-                    text = concept.authDividerLabel,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f))
-            }
-            EmailDoor(
-                isLoading = inProgress != null && inProgress.provider == null,
-                enabled = inProgress == null,
-                onEmailSubmit = onEmailSubmit,
-                modifier = Modifier.padding(top = 8.dp)
-            )
             Spacer(modifier = Modifier.weight(1.4f))
         }
     }
@@ -290,5 +301,57 @@ private fun AuthDoorButton(
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
+}
+
+/** The wait for the confirmation link: what was sent, and where to look. */
+@Composable
+private fun ConfirmationPanel(
+    email: String,
+    modifier: Modifier = Modifier
+) {
+    val concept = LocalConcept.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp, bottom = 8.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.size(64.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = Icons.Outlined.MarkEmailRead,
+                    contentDescription = concept.emailPendingTitle,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+        }
+        Text(
+            text = concept.emailPendingTitle,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 14.dp)
+        )
+        Text(
+            text = concept.emailPendingBody(email),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            text = concept.emailPendingHint,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 10.dp)
+        )
     }
 }

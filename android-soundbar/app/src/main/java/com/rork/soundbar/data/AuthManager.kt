@@ -10,6 +10,8 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -39,7 +41,9 @@ import java.security.SecureRandom
 data class AuthUser(
     val id: String,
     val name: String,
-    val email: String?
+    val email: String?,
+    /** True once the address has tapped the confirmation link. */
+    val emailVerified: Boolean = false
 )
 
 /** Where the app stands with the door. */
@@ -49,6 +53,8 @@ sealed interface AuthState {
     data class InProgress(val provider: AuthProvider?) : AuthState
     /** Signed up, but the account needs the confirmation link from the inbox first. */
     data class EmailConfirmationPending(val email: String) : AuthState
+    /** The confirmation link came home — the address is verified; a sign-in finishes the visit. */
+    data object EmailConfirmed : AuthState
     data class Failed(val message: String) : AuthState
     data class SignedIn(val user: AuthUser) : AuthState
 }
@@ -97,7 +103,8 @@ class AuthManager private constructor(context: Context) {
                 AuthUser(
                     id = id,
                     name = prefs.getString(KEY_USER_NAME, null) ?: "Guest",
-                    email = prefs.getString(KEY_USER_EMAIL, null)
+                    email = prefs.getString(KEY_USER_EMAIL, null),
+                    emailVerified = prefs.getBoolean(KEY_USER_VERIFIED, false)
                 )
             )
         }
@@ -113,6 +120,8 @@ class AuthManager private constructor(context: Context) {
                 val body = buildJsonObject {
                     put("email", trimmed)
                     put("password", password)
+                    // The confirmation link hands the reader back into the app.
+                    put("email_redirect_to", callbackUrl())
                 }.toString()
                 val response = http.post("${AuthConfig.SUPABASE_URL}/auth/v1/signup") {
                     apiKeyHeaders()
@@ -183,23 +192,47 @@ class AuthManager private constructor(context: Context) {
         withMain { openBrowser(authorizeUrl.toString()) }
     }
 
-    /** Catches the redirect back into the app and trades the code for tokens. */
+    /**
+     * Catches the redirect back into the app — either an OAuth handshake
+     * trading its code, or the email-confirmation link carrying the fresh
+     * session home on its back.
+     */
     fun handleCallback(uri: Uri) {
+        val params = callbackParams(uri)
+
+        // The browser reports a failure — a cancelled consent or a stale link.
+        params["error"]?.let {
+            val wasHandshake = _state.value is AuthState.InProgress
+            pendingProvider = null
+            pendingVerifier = null
+            _state.value = if (wasHandshake) {
+                AuthState.Failed("Sign-in was cancelled.")
+            } else {
+                AuthState.Failed("That confirmation link has expired — sign in to get a fresh one.")
+            }
+            return
+        }
+
+        // The email's confirmation link arrives holding the session itself.
+        val access = params["access_token"]
+        val refresh = params["refresh_token"]
+        if (!access.isNullOrBlank() && !refresh.isNullOrBlank()) {
+            pendingProvider = null
+            pendingVerifier = null
+            _state.value = AuthState.InProgress(provider = null)
+            scope.launch { exchangeEmailSession(access, refresh) }
+            return
+        }
+
+        val code = params["code"] ?: return
+        val verifier = pendingVerifier
+        if (verifier == null) {
+            // A confirmation code without a handshake: the address is verified,
+            // but the session must come from a proper sign-in.
+            _state.value = AuthState.EmailConfirmed
+            return
+        }
         if (_state.value !is AuthState.InProgress) return
-        val verifier = pendingVerifier ?: return
-        uri.getQueryParameter("error")?.let {
-            pendingProvider = null
-            pendingVerifier = null
-            _state.value = AuthState.Failed("Sign-in was cancelled.")
-            return
-        }
-        val code = uri.getQueryParameter("code")
-        if (code.isNullOrBlank()) {
-            pendingProvider = null
-            pendingVerifier = null
-            _state.value = AuthState.Failed("Sign-in couldn't be verified. Please try again.")
-            return
-        }
         scope.launch {
             try {
                 val body = buildJsonObject {
@@ -225,6 +258,42 @@ class AuthManager private constructor(context: Context) {
                 pendingVerifier = null
             }
         }
+    }
+
+    /** Builds the session from the tokens an email-confirmation link brought home. */
+    private suspend fun exchangeEmailSession(accessToken: String, refreshToken: String) {
+        try {
+            val response = http.get("${AuthConfig.SUPABASE_URL}/auth/v1/user") {
+                header("apikey", AuthConfig.SUPABASE_ANON_KEY)
+                header("Authorization", "Bearer $accessToken")
+            }
+            if (!response.status.isSuccess()) throw IllegalStateException("user lookup failed")
+            val user = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            signInFromSession(buildJsonObject {
+                put("access_token", accessToken)
+                put("refresh_token", refreshToken)
+                put("user", user)
+            })
+        } catch (error: Exception) {
+            Log.w(TAG, "Confirmation session failed: ${error.message}", error)
+            // The address is verified regardless — a sign-in completes the visit.
+            _state.value = AuthState.EmailConfirmed
+        }
+    }
+
+    /** The deep link's fragment and query flattened into one map. */
+    private fun callbackParams(uri: Uri): Map<String, String> {
+        val params = mutableMapOf<String, String>()
+        uri.fragment?.split('&')?.forEach { pair ->
+            val index = pair.indexOf('=')
+            if (index > 0) {
+                params[pair.take(index)] = Uri.decode(pair.substring(index + 1))
+            }
+        }
+        listOf("error", "error_description", "code", "access_token", "refresh_token").forEach { key ->
+            uri.getQueryParameter(key)?.let { params[key] = it }
+        }
+        return params
     }
 
     /** The current bearer token, if a signed-in session holds one. */
@@ -291,12 +360,14 @@ class AuthManager private constructor(context: Context) {
                 ?: meta?.str("user_name")
                 ?: email?.substringBefore('@')
                 ?: "Guest",
-            email = email
+            email = email,
+            emailVerified = user["email_confirmed_at"] != null || user["confirmed_at"] != null
         )
         prefs.edit()
             .putString(KEY_USER_ID, signedIn.id)
             .putString(KEY_USER_NAME, signedIn.name)
             .putString(KEY_USER_EMAIL, signedIn.email)
+            .putBoolean(KEY_USER_VERIFIED, signedIn.emailVerified)
             .putString(KEY_ACCESS_TOKEN, payload.str("access_token") ?: "")
             .putString(KEY_REFRESH_TOKEN, payload.str("refresh_token"))
             .apply()
@@ -365,6 +436,7 @@ class AuthManager private constructor(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_EMAIL = "user_email"
+        private const val KEY_USER_VERIFIED = "user_verified"
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
 

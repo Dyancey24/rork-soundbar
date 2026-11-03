@@ -316,6 +316,7 @@ private fun AppShell(
                     signedIn = account != null,
                     accountName = account?.name,
                     accountEmail = account?.email,
+                    accountVerified = account?.emailVerified == true,
                     points = state.points,
                     genreBadges = state.genreBadges,
                     genreSongs = state.genreSongs,

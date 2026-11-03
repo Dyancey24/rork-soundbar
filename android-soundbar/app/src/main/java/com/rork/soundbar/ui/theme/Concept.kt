@@ -235,6 +235,29 @@ enum class Concept(val id: String) {
         }
     val barSwitchConfirm: String get() = "Yes, to the bar"
     val barSwitchCancel: String get() = "Stay in the kitchen"
+
+    /** The email-confirmation round trip: the ask, the wait, and the welcome back. */
+    val emailPendingTitle: String
+        get() = if (this == BAR) "The request is in" else "The order is in"
+    fun emailPendingBody(email: String): String =
+        if (this == BAR) {
+            "We sent a confirmation link to $email. Tap it and the bar finishes opening your tab."
+        } else {
+            "We sent a confirmation link to $email. Tap it and the kitchen finishes plating your account."
+        }
+    val emailPendingHint: String
+        get() = if (this == BAR) {
+            "Not seeing it? Check the spam drawer."
+        } else {
+            "Not seeing it? Check the spam drawer."
+        }
+    val emailConfirmedBanner: String
+        get() = if (this == BAR) {
+            "Email confirmed — sign in and the bar is yours."
+        } else {
+            "Email confirmed — sign in and the kitchen is yours."
+        }
+    val emailVerifiedBadge: String get() = "Email verified"
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"
