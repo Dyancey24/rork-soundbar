@@ -12,10 +12,12 @@
 // 48-hour grace (stored in Supabase user_metadata), then the worker removes
 // the auth user plus its leaderboard rows and shelf snapshot — lazily on the
 // user's own requests, and for absent users on a cron schedule.
+// The public request pages live in deletion-page.ts: /account-deletion.
 
 import { DurableObject } from "cloudflare:workers";
 
 export { Leaderboard } from "./leaderboard";
+import { handleDeletionPage } from "./deletion-page";
 
 type Env = {
   DO: Fetcher;
@@ -165,6 +167,10 @@ export default {
     if (url.pathname === "/ping") {
       return Response.json({ ok: true, now: new Date().toISOString() });
     }
+
+    // The public account-deletion pages live outside the authed DO routing.
+    const deletionResponse = await handleDeletionPage(request, env);
+    if (deletionResponse) return deletionResponse;
 
     if (url.pathname.startsWith("/leaderboard") || url.pathname === "/shelf") {
       const auth = await authedUser(request, env);
