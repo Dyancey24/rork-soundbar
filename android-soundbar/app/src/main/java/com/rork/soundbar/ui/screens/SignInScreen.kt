@@ -18,7 +18,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -38,20 +37,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rork.soundbar.data.AuthProvider
 import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.ui.theme.LocalConcept
 
 /**
  * The door, opened from the menu's invitation. The guest signs in or creates
- * an account — with Google, Apple, or email + password — so the house keeps
- * their shelf, recipes, and notes waiting; but they are free to browse, mix,
- * and pour without ever knocking.
+ * an account with email + password so the house keeps their shelf, recipes,
+ * and notes waiting; but they are free to browse, mix, and pour without ever
+ * knocking.
  */
 @Composable
 fun SignInScreen(
     state: AuthState,
-    onSignIn: (AuthProvider) -> Unit,
     onEmailSubmit: (isSignUp: Boolean, email: String, password: String) -> Unit,
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -122,34 +119,9 @@ fun SignInScreen(
                 )
             }
             if (pending != null) {
-                // The inbox holds the last step: the doors give way to the wait.
+                // The inbox holds the last step: the door gives way to the wait.
                 ConfirmationPanel(email = pending.email)
             } else {
-                AuthProvider.entries.forEach { provider ->
-                    AuthDoorButton(
-                        provider = provider,
-                        isLoading = inProgress?.provider == provider,
-                        enabled = inProgress == null,
-                        onClick = { onSignIn(provider) },
-                        emphasized = provider == AuthProvider.GOOGLE,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                ) {
-                    HorizontalDivider(modifier = Modifier.weight(1f))
-                    Text(
-                        text = concept.authDividerLabel,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-                    HorizontalDivider(modifier = Modifier.weight(1f))
-                }
                 EmailDoor(
                     isLoading = inProgress != null && inProgress.provider == null,
                     enabled = inProgress == null,
@@ -241,64 +213,6 @@ private fun EmailDoor(
             Text(
                 text = if (signUpMode) concept.authToggleSignInLabel else concept.authToggleSignUpLabel,
                 fontSize = 13.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthDoorButton(
-    provider: AuthProvider,
-    isLoading: Boolean,
-    enabled: Boolean,
-    emphasized: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(50),
-        color = if (emphasized) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        contentColor = if (emphasized) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        },
-        border = if (emphasized) {
-            null
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Spacer(modifier = Modifier.size(10.dp))
-            }
-            Text(
-                text = if (isLoading) {
-                    "Opening ${provider.displayName}…"
-                } else {
-                    "Continue with ${provider.displayName}"
-                },
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
             )
         }
     }

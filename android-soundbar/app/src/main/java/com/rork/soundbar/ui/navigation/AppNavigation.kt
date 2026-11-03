@@ -67,7 +67,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rork.soundbar.data.AuthManager
-import com.rork.soundbar.data.AuthProvider
 import com.rork.soundbar.data.AuthState
 import com.rork.soundbar.data.AuthUser
 import com.rork.soundbar.data.SpotifyConnection
@@ -153,7 +152,6 @@ fun AppNavigation() {
                 viewModel = viewModel,
                 authState = authState,
                 account = (authState as? AuthState.SignedIn)?.user,
-                onSignIn = auth::signIn,
                 onEmailSubmit = { isSignUp, email, password ->
                     if (isSignUp) auth.signUpWithEmail(email, password) else auth.signInWithEmail(email, password)
                 },
@@ -169,7 +167,6 @@ private fun AppShell(
     viewModel: SoundbarViewModel,
     authState: AuthState,
     account: AuthUser?,
-    onSignIn: (AuthProvider) -> Unit,
     onEmailSubmit: (isSignUp: Boolean, email: String, password: String) -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -257,7 +254,6 @@ private fun AppShell(
                 }
                 SignInScreen(
                     state = authState,
-                    onSignIn = onSignIn,
                     onEmailSubmit = onEmailSubmit,
                     onBack = { navController.popBackStack() }
                 )
