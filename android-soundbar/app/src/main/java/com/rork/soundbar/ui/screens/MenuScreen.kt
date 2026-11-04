@@ -294,7 +294,7 @@ fun PlatformRow(
             fontSize = 13.sp,
             modifier = Modifier.weight(1f)
         )
-        StreamingPlatform.entries.forEach { platform ->
+        StreamingPlatform.live().forEach { platform ->
             PlatformPill(
                 platform = platform,
                 isSelected = platform == selected,

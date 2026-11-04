@@ -20,6 +20,14 @@ enum class StreamingPlatform(
     APPLE_MUSIC("apple", "Apple Music", "com.apple.android.music");
 
     /**
+     * The houses open for service. Apple Music's plumbing is kept warm for
+     * the day its provider support arrives, but its door stays hidden until
+     * then — the same treatment the social sign-in doors received.
+     */
+    val isLive: Boolean
+        get() = this != APPLE_MUSIC
+
+    /**
      * Opens the blend's music in this platform, searched by the track that
      * will start pouring — or by the blend's name when it has no tracks.
      */
@@ -58,7 +66,10 @@ enum class StreamingPlatform(
         private const val TAG = "StreamingPlatform"
         private const val WEB_URL = "https://music.apple.com/us/search?term="
 
+        /** The houses offered in the pickers — only the ones open for service. */
+        fun live(): List<StreamingPlatform> = entries.filter { it.isLive }
+
         fun fromId(id: String): StreamingPlatform =
-            entries.firstOrNull { it.id == id } ?: SPOTIFY
+            entries.firstOrNull { it.id == id && it.isLive } ?: SPOTIFY
     }
 }
