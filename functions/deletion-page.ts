@@ -23,6 +23,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_1BrAevm9i1dNsh2HpxuhIw_03y6Llct";
 const PATH_REQUEST = "/account-deletion";
 const PATH_CONFIRM = "/account-deletion/confirm";
 
+/** The house's public contact address; env keeps it overridable. */
+const SUPPORT_EMAIL = "help@mentallydelicio.us";
+
 function supabaseCreds(env: PageEnv): { url: string; key: string } {
   return {
     url: env.SUPABASE_URL ?? env.EXPO_PUBLIC_SUPABASE_URL ?? SUPABASE_URL,
@@ -32,9 +35,7 @@ function supabaseCreds(env: PageEnv): { url: string; key: string } {
 
 /** Shared chrome: espresso dark, gold accents, warm house voice. */
 function pageShell(title: string, body: string, env: PageEnv): string {
-  const support = env.SUPPORT_EMAIL
-    ? `<p class="support">Trouble signing in? Write to <a href="mailto:${env.SUPPORT_EMAIL}">${env.SUPPORT_EMAIL}</a>.</p>`
-    : "";
+  const support = `<p class="support">Trouble signing in? Write to <a href="mailto:${env.SUPPORT_EMAIL ?? SUPPORT_EMAIL}">${env.SUPPORT_EMAIL ?? SUPPORT_EMAIL}</a>.</p>`;
   return `<!doctype html>
 <html lang="en">
 <head>

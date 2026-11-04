@@ -1,5 +1,7 @@
 package com.rork.soundbar.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -38,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.AuthState
+import com.rork.soundbar.data.LegalLinks
 import com.rork.soundbar.ui.theme.LocalConcept
 
 /**
@@ -129,9 +133,49 @@ fun SignInScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
+            LegalLinksFootnote()
             Spacer(modifier = Modifier.weight(1.4f))
         }
     }
+}
+
+/** The paperwork at the foot of the door: the privacy promise and the rules. */
+@Composable
+private fun LegalLinksFootnote() {
+    val concept = LocalConcept.current
+    val context = LocalContext.current
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+    ) {
+        TextButton(onClick = { openInBrowser(context, LegalLinks.PRIVACY_URL) }) {
+            Text(
+                text = concept.privacyPolicyLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+        }
+        Text(
+            text = "·",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 20.dp)
+        )
+        TextButton(onClick = { openInBrowser(context, LegalLinks.TERMS_URL) }) {
+            Text(
+                text = concept.termsLabel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+/** Opens a web address in whatever browser the reader has. */
+private fun openInBrowser(context: android.content.Context, url: String) {
+    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
 /**

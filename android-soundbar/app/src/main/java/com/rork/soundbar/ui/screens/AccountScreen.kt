@@ -1,5 +1,7 @@
 package com.rork.soundbar.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -48,12 +50,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Genre
 import com.rork.soundbar.data.GenreCatalog
+import com.rork.soundbar.data.LegalLinks
 import com.rork.soundbar.data.Profile
 import com.rork.soundbar.data.Rewards
 import com.rork.soundbar.data.StreamingPlatform
@@ -214,6 +218,10 @@ fun AccountScreen(
                     onSetSharing = onSetSharing
                 )
             }
+
+            item("legal") {
+                LegalCard()
+            }
         }
 
         if (showDeleteDialog) {
@@ -356,6 +364,53 @@ private fun AccountCard(
         }
         }
     }
+}
+
+/**
+ * The paperwork: the privacy policy and house rules, published on the web.
+ * A quiet card at the foot of the desk — the links open in the browser.
+ */
+@Composable
+private fun LegalCard(modifier: Modifier = Modifier) {
+    val concept = LocalConcept.current
+    val context = LocalContext.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                text = concept.legalHint,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+            Row(modifier = Modifier.padding(top = 2.dp)) {
+                TextButton(onClick = { openInBrowser(context, LegalLinks.PRIVACY_URL) }) {
+                    Text(
+                        text = concept.privacyPolicyLabel,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                TextButton(onClick = { openInBrowser(context, LegalLinks.TERMS_URL) }) {
+                    Text(
+                        text = concept.termsLabel,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Opens a web address in whatever browser the reader has. */
+private fun openInBrowser(context: android.content.Context, url: String) {
+    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
 /** The quiet but unmistakable way out, offered beneath the account plaque. */

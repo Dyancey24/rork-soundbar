@@ -297,6 +297,16 @@ enum class Concept(val id: String) {
             "This account is set to be deleted for good — visit the Household Ledger to undo it."
         }
     val deletionUndoLabel: String get() = "Undo deletion"
+
+    /** The paperwork: the privacy promise and the rules of the room. */
+    val privacyPolicyLabel: String get() = "Privacy policy"
+    val termsLabel: String get() = "House rules"
+    val legalHint: String
+        get() = if (this == BAR) {
+            "How the bar handles your details — and the rules of the room."
+        } else {
+            "How the kitchen handles your details — and the rules of the room."
+        }
     val savedLabel: String get() = if (this == BAR) "On your shelf" else "In your pantry"
     val saveLabel: String get() = if (this == BAR) "Save to shelf" else "Save to pantry"
     val removeLabel: String get() = if (this == BAR) "Remove from shelf" else "Remove from pantry"

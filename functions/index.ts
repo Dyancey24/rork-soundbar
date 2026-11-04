@@ -13,11 +13,13 @@
 // the auth user plus its leaderboard rows and shelf snapshot — lazily on the
 // user's own requests, and for absent users on a cron schedule.
 // The public request pages live in deletion-page.ts: /account-deletion.
+// The public legal pages live in legal-page.ts: /privacy and /terms.
 
 import { DurableObject } from "cloudflare:workers";
 
 export { Leaderboard } from "./leaderboard";
 import { handleDeletionPage } from "./deletion-page";
+import { handleLegalPage } from "./legal-page";
 
 type Env = {
   DO: Fetcher;
@@ -167,6 +169,10 @@ export default {
     if (url.pathname === "/ping") {
       return Response.json({ ok: true, now: new Date().toISOString() });
     }
+
+    // The public legal pages — privacy policy and house rules.
+    const legalResponse = handleLegalPage(request, env);
+    if (legalResponse) return legalResponse;
 
     // The public account-deletion pages live outside the authed DO routing.
     const deletionResponse = await handleDeletionPage(request, env);
