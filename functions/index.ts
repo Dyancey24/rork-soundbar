@@ -14,6 +14,7 @@
 // user's own requests, and for absent users on a cron schedule.
 // The public request pages live in deletion-page.ts: /account-deletion.
 // The public legal pages live in legal-page.ts: /privacy and /terms.
+// (The service key for the deletion sweep arrives through the project env.)
 
 import { DurableObject } from "cloudflare:workers";
 
