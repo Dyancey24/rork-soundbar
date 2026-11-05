@@ -31,6 +31,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -301,6 +302,28 @@ class SpotifyManager private constructor(context: Context) {
             .putLong(KEY_EXPIRES, System.currentTimeMillis() + (expiresIn - 60) * 1000)
             .apply()
         if (refresh != null) prefs.edit().putString(KEY_REFRESH, refresh).apply()
+    }
+
+    /**
+     * Asks Spotify whether its player is actively pouring right now. Any
+     * doubt — no token, a dead network, a silent player — reads as false, so
+     * the listening ledger never earns on faith.
+     */
+    suspend fun isPlayerActive(): Boolean {
+        val token = accessToken() ?: return false
+        return try {
+            val response = http.get(
+                "${SpotifyConfig.API_URL}/v1/me/player/currently-playing?additional_types=track"
+            ) {
+                header(HttpHeaders.Authorization, "Bearer $token")
+            }
+            if (!response.status.isSuccess()) return false
+            Json.parseToJsonElement(response.bodyAsText())
+                .jsonObject["is_playing"]?.jsonPrimitive?.booleanOrNull == true
+        } catch (error: Exception) {
+            Log.w(TAG, "Player check failed")
+            false
+        }
     }
 
     private suspend fun whoAmI(): String {

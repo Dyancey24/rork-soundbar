@@ -29,6 +29,7 @@ import com.rork.soundbar.data.SpotifyConnection
 import com.rork.soundbar.data.SpotifyManager
 import com.rork.soundbar.data.SpotifyQueueResult
 import com.rork.soundbar.data.StreamingPlatform
+import com.rork.soundbar.data.Track
 import com.rork.soundbar.data.TrackLibrary
 import com.rork.soundbar.ui.theme.Concept
 import kotlinx.coroutines.CoroutineScope
@@ -935,6 +936,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     private fun startTicker() {
         tickerJob?.cancel()
+        // With Spotify connected the stopwatch answers to the real player: it
+        // checks every so often, and a silent player holds the clock — no
+        // position, no credit — until the music pours again. Unconnected, the
+        // plain clock keeps working as it always has.
+        val playerCheckTicks = 20
+        var ticksSinceCheck = playerCheckTicks
+        var playerLive = true
         tickerJob = viewModelScope.launch {
             while (true) {
                 delay(1000)
@@ -943,6 +951,14 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 if (!playback.isPlaying) break
                 val blend = findBlend(playback.blendId) ?: break
                 val track = blend.tracks.getOrNull(playback.trackIndex) ?: break
+                if (state.spotify is SpotifyConnection.Connected) {
+                    ticksSinceCheck++
+                    if (ticksSinceCheck >= playerCheckTicks) {
+                        playerLive = spotifyManager.isPlayerActive()
+                        ticksSinceCheck = 0
+                    }
+                    if (!playerLive) continue
+                }
                 val position = playback.positionSeconds + 1
                 if (position >= track.seconds) {
                     val next = (playback.trackIndex + 1) % blend.tracks.size
@@ -979,7 +995,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private fun creditListening(blendId: String, trackIndex: Int, blend: Blend, position: Int) {
         val track = blend.tracks.getOrNull(trackIndex) ?: return
         if (position < Rewards.SONG_CREDIT_SECONDS && position < track.seconds) return
-        val key = "$blendId:$trackIndex"
+        // The credit belongs to the song itself, wherever it pours — the same
+        // song in a second blend has already been paid. Older history carries
+        // blend-keyed keys; it stays as already-paid and never re-pays.
+        val key = songKey(track)
         val state = _uiState.value
         if (state.listenedTracks.contains(key)) return
         val listenedTracks = state.listenedTracks + key
@@ -1004,7 +1023,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         var points = state.points + Rewards.payout(Rewards.SONG_POINTS, multiplier)
         var completedAlbums = state.completedAlbums
         if (!completedAlbums.contains(blendId) &&
-            blend.tracks.indices.all { listenedTracks.contains("$blendId:$it") }
+            blend.tracks.all { listenedTracks.contains(songKey(it)) }
         ) {
             completedAlbums = completedAlbums + blendId
             points += Rewards.payout(Rewards.ALBUM_POINTS, multiplier)
@@ -1030,6 +1049,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         recomputeStats()
         pushLeaderboardScore()
     }
+
+    /** The song's credit key: title and artist, spelled the same wherever it pours. */
+    private fun songKey(track: Track): String =
+        "${track.title.trim().lowercase()}|${track.artist.trim().lowercase()}"
 
     // endregion
 
