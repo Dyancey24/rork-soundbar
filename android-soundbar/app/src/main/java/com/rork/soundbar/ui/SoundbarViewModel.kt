@@ -818,7 +818,14 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         persist()
         startTicker()
         refreshSignature()
-        launchExternal(blend, trackIndex)
+        // With Spotify connected, play means play: the blend pours in Spotify's
+        // own player on the reader's active device. Without it, the chosen
+        // streaming house opens, ready for the reader to press play there.
+        if (_uiState.value.spotify is SpotifyConnection.Connected) {
+            pourNow(blend, startIndex)
+        } else {
+            launchExternal(blend, trackIndex)
+        }
     }
 
     fun togglePlayPause() {
@@ -909,9 +916,19 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
             connectSpotify()
             return
         }
+        pourNow(blend, 0)
+    }
+
+    /**
+     * Lines the blend up in Spotify's real player and says where it went —
+     * the shared pour behind the dish screen's queue button and every play
+     * press when Spotify is connected.
+     */
+    private fun pourNow(blend: Blend, startIndex: Int) {
+        if (_uiState.value.isPouring) return
         _uiState.update { it.copy(isPouring = true) }
         syncScope.launch {
-            val outcome = spotifyManager.queueAndPlay(blend.tracks)
+            val outcome = spotifyManager.queueAndPlay(blend.tracks, startIndex)
             _uiState.update { it.copy(isPouring = false) }
             withContext(Dispatchers.Main) {
                 val concept = _uiState.value.concept

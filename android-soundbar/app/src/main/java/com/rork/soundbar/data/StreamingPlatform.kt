@@ -27,6 +27,13 @@ enum class StreamingPlatform(
     val isLive: Boolean
         get() = this != APPLE_MUSIC
 
+    /** Each house's own web address, for when its app isn't installed. */
+    val webSearchUrl: String
+        get() = when (this) {
+            SPOTIFY -> "https://open.spotify.com/search/"
+            APPLE_MUSIC -> "https://music.apple.com/us/search?term="
+        }
+
     /**
      * Opens the blend's music in this platform, searched by the track that
      * will start pouring — or by the blend's name when it has no tracks.
@@ -38,9 +45,11 @@ enum class StreamingPlatform(
 
         val appIntent = when (this) {
             SPOTIFY -> Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:$encoded"))
-            APPLE_MUSIC -> Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + encoded)).setPackage(appPackage)
+            APPLE_MUSIC -> Intent(Intent.ACTION_VIEW, Uri.parse(webSearchUrl + encoded)).setPackage(appPackage)
         }
-        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL + encoded))
+        // The browser fallback wears the same house as the platform itself —
+        // a Spotify play lands on Spotify's web player, never another's door.
+        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(webSearchUrl + encoded))
         val intent = if (canStart(context, appIntent)) appIntent else webIntent
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
@@ -64,7 +73,6 @@ enum class StreamingPlatform(
 
     companion object {
         private const val TAG = "StreamingPlatform"
-        private const val WEB_URL = "https://music.apple.com/us/search?term="
 
         /** The houses offered in the pickers — only the ones open for service. */
         fun live(): List<StreamingPlatform> = entries.filter { it.isLive }

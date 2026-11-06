@@ -178,12 +178,15 @@ class SpotifyManager private constructor(context: Context) {
      * wakes the active device, and starts the lineup so Spotify's own queue
      * plays the dish end to end.
      */
-    suspend fun queueAndPlay(tracks: List<Track>): SpotifyQueueResult {
+    suspend fun queueAndPlay(tracks: List<Track>, startIndex: Int = 0): SpotifyQueueResult {
         val token = accessToken() ?: return SpotifyQueueResult.NEEDS_CONNECT
 
         val uris = mutableListOf<String>()
         var skipped = 0
-        for (track in tracks) {
+        for ((index, track) in tracks.withIndex()) {
+            // The blend pours from the reader's chosen starting song on —
+            // earlier songs stay behind, so the dish starts where it was asked.
+            if (index < startIndex) continue
             val uri = resolveUri(token, track)
             if (uri != null) uris.add(uri) else skipped++
         }
