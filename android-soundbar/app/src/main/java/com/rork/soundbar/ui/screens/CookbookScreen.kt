@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ fun CookbookScreen(
     onRemoveGuest: (String) -> Unit,
     onOpenBlend: (String) -> Unit,
     onPlayBlend: (Blend) -> Unit,
+    onTogglePlay: () -> Unit,
     onUpdateNote: (String, String) -> Unit,
     onStartMixing: () -> Unit,
     onToggleConcept: () -> Unit,
@@ -102,6 +104,12 @@ fun CookbookScreen(
     // House recipes re-serve under the current concept; a user's own mixes keep their identity.
     val recipes = shelf.map { BlendBar.adapt(it, concept) }
     var tab by rememberSaveable { mutableStateOf(TAB_MINE) }
+
+    // One rule on every page: the card already pouring pauses/resumes;
+    // any other card starts its playlist.
+    fun onPourPressed(blend: Blend) {
+        if (playingBlendId == blend.id) onTogglePlay() else onPlayBlend(blend)
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         BarGlow()
@@ -171,7 +179,7 @@ fun CookbookScreen(
                         isSignature = signatureId == blend.id,
                         isPlaying = playingBlendId == blend.id && isPlaying,
                         onOpen = { onOpenBlend(blend.id) },
-                        onPlay = { onPlayBlend(blend) },
+                        onPlay = { onPourPressed(blend) },
                         onNoteChange = { onUpdateNote(blend.id, it) }
                     )
                 }
@@ -192,7 +200,7 @@ fun CookbookScreen(
                             card = card,
                             isPlaying = playingBlendId == card.blend.id && isPlaying,
                             onOpen = { onOpenBlend(card.blend.id) },
-                            onPlay = { onPlayBlend(card.blend) },
+                            onPlay = { onPourPressed(card.blend) },
                             onRemove = { onRemoveGuest(card.blend.id) }
                         )
                     }
@@ -327,6 +335,7 @@ private fun RecipeCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(168.dp)
+                                .clickable(enabled = active, onClick = onOpen)
                         )
                         FlipChip(
                             label = concept.recipeBackTitle,
@@ -456,6 +465,7 @@ private fun GuestRecipeCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(168.dp)
+                                .clickable(enabled = active, onClick = onOpen)
                         )
                         FlipChip(
                             label = concept.recipeBackTitle,
@@ -577,23 +587,24 @@ private fun FlipCard(
         label = "recipeCardFlip"
     )
     val frontVisible = rotation <= 90f
+    // Only the face toward the reader exists: an invisible face stacked on
+    // top would still swallow taps (it used to eat every tap on the photo).
     Box(modifier) {
-        Box(
-            modifier = Modifier
-                .graphicsLayer {
+        if (frontVisible) {
+            Box(
+                modifier = Modifier.graphicsLayer {
                     rotationY = rotation
                     cameraDistance = 16f * density
                 }
-                .alpha(if (frontVisible) 1f else 0f)
-        ) { front(frontVisible) }
-        Box(
-            modifier = Modifier
-                .graphicsLayer {
+            ) { front(true) }
+        } else {
+            Box(
+                modifier = Modifier.graphicsLayer {
                     rotationY = rotation + 180f
                     cameraDistance = 16f * density
                 }
-                .alpha(if (frontVisible) 0f else 1f)
-        ) { back(!frontVisible) }
+            ) { back(true) }
+        }
     }
 }
 

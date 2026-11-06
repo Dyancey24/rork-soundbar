@@ -61,6 +61,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -195,6 +197,12 @@ private fun AppShell(
         navController.navigate("dish/$blendId")
     }
 
+    // Back from the browser without finishing the Spotify handshake? The
+    // Connect button lets go of its "Connecting" state and works again.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAppResumed()
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -320,6 +328,7 @@ private fun AppShell(
                     onRemoveGuest = viewModel::removeGuestRecipe,
                     onOpenBlend = ::openDish,
                     onPlayBlend = { viewModel.playBlend(it) },
+                    onTogglePlay = viewModel::togglePlayPause,
                     onUpdateNote = viewModel::updateNote,
                     onStartMixing = { navController.navigate("mix") },
                     onToggleConcept = viewModel::toggleConcept,
@@ -355,6 +364,7 @@ private fun AppShell(
                     onSignIn = { navController.navigate("signin") },
                     onSignOut = onSignOut,
                     spotifyConnectedName = (state.spotify as? SpotifyConnection.Connected)?.displayName,
+                    isSpotifyConnecting = state.spotify is SpotifyConnection.Connecting,
                     onConnectSpotify = viewModel::connectSpotify,
                     onDisconnectSpotify = viewModel::disconnectSpotify,
                     onOpenProfile = { navController.navigate("profile") },

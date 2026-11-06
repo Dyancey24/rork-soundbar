@@ -33,6 +33,7 @@ import com.rork.soundbar.data.Track
 import com.rork.soundbar.data.TrackLibrary
 import com.rork.soundbar.ui.theme.Concept
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -129,6 +130,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     private var mixDays: List<Long> = emptyList()
     private var tickerJob: Job? = null
+
+    /** The Spotify pour in flight, cancelled whenever a newer play arrives. */
+    private var pourJob: Job? = null
+
+    /** A play pressed before Spotify was connected, poured once it is. */
+    @Volatile
+    private var pendingPour: Pair<Blend, Int>? = null
     private var noteSaveJob: Job? = null
     private var profilePushJob: Job? = null
     private var exchange: GuestExchange? = null
@@ -170,10 +178,36 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        // The reader's Spotify connection rides along with the house's own state.
+        // The reader's Spotify connection rides along with the house's own
+        // state, and every turn of it is said out loud: connected, cancelled,
+        // or failed — never dead air. A play pressed before connecting pours
+        // the moment the connection lands.
         syncScope.launch {
+            var previous: SpotifyConnection = spotifyManager.state.value
             spotifyManager.state.collect { connection ->
                 _uiState.update { it.copy(spotify = connection) }
+                val concept = _uiState.value.concept
+                when {
+                    connection is SpotifyConnection.Connected &&
+                        previous is SpotifyConnection.Connecting -> {
+                        toast(concept.spotifyJustConnectedMessage(connection.displayName))
+                        pendingPour?.let { (blend, index) ->
+                            pendingPour = null
+                            withContext(Dispatchers.Main) { playBlend(blend, index) }
+                        }
+                    }
+                    connection is SpotifyConnection.Failed -> {
+                        pendingPour = null
+                        toast(connection.message)
+                        spotifyManager.acknowledgeFailure()
+                    }
+                    connection is SpotifyConnection.Disconnected &&
+                        previous is SpotifyConnection.Connecting -> {
+                        pendingPour = null
+                        toast(concept.spotifyConnectCancelledMessage)
+                    }
+                }
+                previous = connection
             }
         }
     }
@@ -803,6 +837,14 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     fun playBlend(blend: Blend, trackIndex: Int = 0) {
         if (blend.tracks.isEmpty()) return
+        // Play means real music, so an unconnected house walks the reader
+        // through connecting first; the asked-for blend waits and pours the
+        // moment the connection lands.
+        if (_uiState.value.spotify !is SpotifyConnection.Connected) {
+            pendingPour = blend to trackIndex
+            connectSpotify()
+            return
+        }
         val startIndex = cleanStartIndex(blend, trackIndex)
         _uiState.update { state ->
             state.copy(
@@ -818,20 +860,20 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         persist()
         startTicker()
         refreshSignature()
-        // With Spotify connected, play means play: the blend pours in Spotify's
-        // own player on the reader's active device. Without it, the chosen
-        // streaming house opens, ready for the reader to press play there.
-        if (_uiState.value.spotify is SpotifyConnection.Connected) {
-            pourNow(blend, startIndex)
-        } else {
-            launchExternal(blend, trackIndex)
-        }
+        // The blend pours in Spotify's own player on the reader's active
+        // device, replacing whatever was pouring before.
+        pourNow(blend, startIndex)
     }
 
     fun togglePlayPause() {
         val playback = _uiState.value.playback ?: return
-        _uiState.update { it.copy(playback = playback.copy(isPlaying = !playback.isPlaying)) }
-        if (!playback.isPlaying) startTicker() else tickerJob?.cancel()
+        val resume = !playback.isPlaying
+        _uiState.update { it.copy(playback = playback.copy(isPlaying = resume)) }
+        if (resume) startTicker() else tickerJob?.cancel()
+        // The real player follows the house's pause and resume.
+        if (_uiState.value.spotify is SpotifyConnection.Connected) {
+            syncScope.launch { spotifyManager.setPlaying(resume) }
+        }
     }
 
     fun skipToNext() {
@@ -894,12 +936,21 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     /** The reader accepted the Premium note — open Spotify's consent screen. */
     fun confirmConnectSpotify() {
         _uiState.update { it.copy(isSpotifyPromptVisible = false) }
+        Toast.makeText(getApplication(), _uiState.value.concept.spotifyOpeningMessage, Toast.LENGTH_SHORT).show()
         spotifyManager.startConnect()
     }
 
     /** The reader stepped back from the door. */
     fun dismissSpotifyPrompt() {
+        pendingPour = null
         _uiState.update { it.copy(isSpotifyPromptVisible = false) }
+    }
+
+    /** The reader is back in the app; a handshake left unfinished lets go. */
+    fun onAppResumed() = spotifyManager.abandonIfStillConnecting()
+
+    private suspend fun toast(message: String) = withContext(Dispatchers.Main) {
+        Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
     }
 
     /** Forgets the reader's Spotify tokens. */
@@ -910,14 +961,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
      * matched and handed to the reader's active device. When no account is
      * connected yet, the Premium heads-up comes before Spotify is ever opened.
      */
-    fun pourToSpotify(blend: Blend) {
-        if (_uiState.value.isPouring) return
-        if (_uiState.value.spotify !is SpotifyConnection.Connected) {
-            connectSpotify()
-            return
-        }
-        pourNow(blend, 0)
-    }
+    fun pourToSpotify(blend: Blend) = playBlend(blend, 0)
 
     /**
      * Lines the blend up in Spotify's real player and says where it went —
@@ -925,11 +969,17 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
      * press when Spotify is connected.
      */
     private fun pourNow(blend: Blend, startIndex: Int) {
-        if (_uiState.value.isPouring) return
+        // The newest press always wins: any pour still in flight is called
+        // off, so switching playlists never waits on (or is eaten by) the last.
+        pourJob?.cancel()
         _uiState.update { it.copy(isPouring = true) }
-        syncScope.launch {
-            val outcome = spotifyManager.queueAndPlay(blend.tracks, startIndex)
-            _uiState.update { it.copy(isPouring = false) }
+        lateinit var job: Job
+        job = syncScope.launch(start = CoroutineStart.LAZY) {
+            val outcome = try {
+                spotifyManager.queueAndPlay(blend.tracks, startIndex)
+            } finally {
+                if (pourJob === job) _uiState.update { it.copy(isPouring = false) }
+            }
             withContext(Dispatchers.Main) {
                 val concept = _uiState.value.concept
                 val message = when (outcome) {
@@ -942,6 +992,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
             }
         }
+        pourJob = job
+        job.start()
     }
 
     fun stopPlayback() {

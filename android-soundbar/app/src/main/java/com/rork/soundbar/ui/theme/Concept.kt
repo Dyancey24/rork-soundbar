@@ -187,6 +187,11 @@ enum class Concept(val id: String) {
         }
     fun spotifyConnectedAs(name: String): String = "Connected as $name"
     val spotifyNotConnectedLabel: String get() = "Not connected"
+    val spotifyConnectingLabel: String get() = "Connecting… finish in the browser"
+    val spotifyOpeningMessage: String get() = "Opening Spotify to connect…"
+    fun spotifyJustConnectedMessage(name: String): String =
+        if (this == BAR) "Spotify connected as $name — the house is pouring." else "Spotify connected as $name — the kitchen is serving."
+    val spotifyConnectCancelledMessage: String get() = "Spotify wasn't connected — tap Connect to try again."
     val spotifyConnectLabel: String get() = "Connect"
     val spotifyDisconnectLabel: String get() = "Disconnect"
     val spotifyPremiumTitle: String

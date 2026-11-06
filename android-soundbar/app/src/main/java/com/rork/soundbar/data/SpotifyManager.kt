@@ -1,6 +1,7 @@
 package com.rork.soundbar.data
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
@@ -82,6 +83,12 @@ class SpotifyManager private constructor(context: Context) {
 
     private var pendingState: String? = null
 
+    /** True while the code-for-token exchange is in flight. */
+    @Volatile
+    private var exchanging = false
+
+    private var connectStartedAt = 0L
+
     init {
         if (prefs.getString(KEY_REFRESH, null) != null) {
             _state.value = SpotifyConnection.Connected(
@@ -96,12 +103,18 @@ class SpotifyManager private constructor(context: Context) {
             _state.value = SpotifyConnection.Failed("Spotify is not configured yet.")
             return
         }
-        if (_state.value is SpotifyConnection.Connecting) return
+        // A fresh press always starts a fresh handshake: a reader who backed
+        // out of the browser last time must never be stuck at "Connecting".
+        if (exchanging) return
         val verifier = codeVerifier()
         val state = newToken(16)
         pendingState = state
-        prefs.edit().putString(KEY_VERIFIER, verifier).apply()
+        prefs.edit()
+            .putString(KEY_VERIFIER, verifier)
+            .putString(KEY_PENDING_STATE, state)
+            .apply()
         _state.value = SpotifyConnection.Connecting
+        connectStartedAt = System.currentTimeMillis()
 
         val authorize = Uri.parse(SpotifyConfig.AUTHORIZE_URL).buildUpon()
             .appendQueryParameter("client_id", SpotifyConfig.CLIENT_ID)
@@ -112,11 +125,46 @@ class SpotifyManager private constructor(context: Context) {
             .appendQueryParameter("state", state)
             .appendQueryParameter("scope", SpotifyConfig.SCOPES)
             .build()
+        // Launched from the application context, the browser needs its own
+        // task — without the flag Android refuses the launch outright, which
+        // is why the door used to stay silently shut. Custom Tabs first, the
+        // plain browser as backup.
         try {
-            CustomTabsIntent.Builder().build().launchUrl(appContext, authorize)
+            val tabs = CustomTabsIntent.Builder().build()
+            tabs.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            tabs.launchUrl(appContext, authorize)
         } catch (error: Exception) {
-            Log.w(TAG, "Could not open the Spotify consent screen")
-            _state.value = SpotifyConnection.Failed("No browser would open — check your connection.")
+            try {
+                appContext.startActivity(
+                    Intent(Intent.ACTION_VIEW, authorize).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (inner: Exception) {
+                Log.w(TAG, "Could not open the Spotify consent screen")
+                _state.value = SpotifyConnection.Failed("No browser would open — install or enable one and try again.")
+            }
+        }
+    }
+
+    /**
+     * The reader came back to the app without finishing in the browser. A
+     * handshake left hanging falls back to disconnected so the button works
+     * again; a real callback arriving afterwards still completes.
+     */
+    fun abandonIfStillConnecting() {
+        val waited = System.currentTimeMillis() - connectStartedAt
+        if (_state.value is SpotifyConnection.Connecting && !exchanging && waited > 1500) {
+            _state.value = SpotifyConnection.Disconnected
+        }
+    }
+
+    /** Clears a shown failure once the reader has seen it. */
+    fun acknowledgeFailure() {
+        if (_state.value is SpotifyConnection.Failed) {
+            _state.value = if (prefs.getString(KEY_REFRESH, null) != null) {
+                SpotifyConnection.Connected(prefs.getString(KEY_NAME, null) ?: "Spotify")
+            } else {
+                SpotifyConnection.Disconnected
+            }
         }
     }
 
@@ -130,13 +178,22 @@ class SpotifyManager private constructor(context: Context) {
         }
         val code = data.getQueryParameter("code") ?: return
         val state = data.getQueryParameter("state")
-        if (state == null || state != pendingState) {
-            pendingState = null
+        // The expected state survives the app being closed while the browser
+        // was open, so a cold-started return still matches.
+        val expected = pendingState ?: prefs.getString(KEY_PENDING_STATE, null)
+        pendingState = null
+        prefs.edit().remove(KEY_PENDING_STATE).apply()
+        if (state == null || state != expected) {
             _state.value = SpotifyConnection.Failed("Spotify's reply didn't match — try once more.")
             return
         }
-        pendingState = null
-        val verifier = prefs.getString(KEY_VERIFIER, null) ?: return
+        val verifier = prefs.getString(KEY_VERIFIER, null)
+        if (verifier == null) {
+            _state.value = SpotifyConnection.Failed("Spotify's reply didn't match — try once more.")
+            return
+        }
+        _state.value = SpotifyConnection.Connecting
+        exchanging = true
         scope.launch {
             try {
                 val form = "grant_type=authorization_code" +
@@ -156,10 +213,14 @@ class SpotifyManager private constructor(context: Context) {
                 }
                 storeSession(payload)
                 prefs.edit().remove(KEY_VERIFIER).apply()
-                _state.value = SpotifyConnection.Connected(displayName = whoAmI())
+                val name = whoAmI()
+                prefs.edit().putString(KEY_NAME, name).apply()
+                _state.value = SpotifyConnection.Connected(displayName = name)
             } catch (error: Exception) {
                 Log.w(TAG, "Spotify handshake failed")
                 _state.value = SpotifyConnection.Failed("Couldn't reach Spotify — check your connection.")
+            } finally {
+                exchanging = false
             }
         }
     }
@@ -178,7 +239,19 @@ class SpotifyManager private constructor(context: Context) {
      * wakes the active device, and starts the lineup so Spotify's own queue
      * plays the dish end to end.
      */
-    suspend fun queueAndPlay(tracks: List<Track>, startIndex: Int = 0): SpotifyQueueResult {
+    suspend fun queueAndPlay(tracks: List<Track>, startIndex: Int = 0): SpotifyQueueResult =
+        try {
+            pour(tracks, startIndex)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // A dropped network mid-pour reads as a failed pour, never a crash
+            // that leaves the play buttons wedged.
+            Log.w(TAG, "Spotify pour failed")
+            SpotifyQueueResult.FAILED
+        }
+
+    private suspend fun pour(tracks: List<Track>, startIndex: Int): SpotifyQueueResult {
         val token = accessToken() ?: return SpotifyQueueResult.NEEDS_CONNECT
 
         val uris = mutableListOf<String>()
@@ -218,6 +291,26 @@ class SpotifyManager private constructor(context: Context) {
             response.status.value == 403 -> SpotifyQueueResult.NOT_PREMIUM
             response.status.value == 404 -> SpotifyQueueResult.NO_DEVICE
             else -> SpotifyQueueResult.FAILED
+        }
+    }
+
+    /**
+     * Pauses or resumes Spotify's own player, so the pour button's
+     * pause/resume reaches the real music. Failures stay quiet — the
+     * reader can always use Spotify's controls.
+     */
+    suspend fun setPlaying(play: Boolean) {
+        val token = accessToken() ?: return
+        try {
+            http.put("${SpotifyConfig.API_URL}/v1/me/player/${if (play) "play" else "pause"}") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w(TAG, "Spotify ${if (play) "resume" else "pause"} failed")
         }
     }
 
@@ -366,6 +459,7 @@ class SpotifyManager private constructor(context: Context) {
         private const val KEY_EXPIRES = "expires_at"
         private const val KEY_NAME = "display_name"
         private const val KEY_VERIFIER = "pkce_verifier"
+        private const val KEY_PENDING_STATE = "pkce_state"
 
         @Volatile
         private var instance: SpotifyManager? = null

@@ -2,6 +2,7 @@ package com.rork.soundbar.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,7 @@ fun FeaturedBlendCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(196.dp)
+                    .clickable(onClick = onOpen)
             )
             Row(
                 modifier = Modifier.padding(start = 18.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
@@ -151,6 +153,7 @@ fun CompactBlendCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.15f)
+                    .clickable(onClick = onOpen)
             )
             Row(
                 modifier = Modifier.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 12.dp),

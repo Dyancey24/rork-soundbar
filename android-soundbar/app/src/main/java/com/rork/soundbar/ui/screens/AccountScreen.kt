@@ -100,6 +100,7 @@ fun AccountScreen(
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     spotifyConnectedName: String?,
+    isSpotifyConnecting: Boolean,
     onConnectSpotify: () -> Unit,
     onDisconnectSpotify: () -> Unit,
     isExplicitFiltered: Boolean,
@@ -166,6 +167,7 @@ fun AccountScreen(
             item("spotify") {
                 SpotifyCard(
                     connectedName = spotifyConnectedName,
+                    isConnecting = isSpotifyConnecting,
                     onConnect = onConnectSpotify,
                     onDisconnect = onDisconnectSpotify
                 )
@@ -464,6 +466,7 @@ private fun DeleteAccountCard(
 @Composable
 private fun SpotifyCard(
     connectedName: String?,
+    isConnecting: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier
@@ -509,8 +512,8 @@ private fun SpotifyCard(
                 )
                 Text(
                     text = connectedName?.let { concept.spotifyConnectedAs(it) }
-                        ?: concept.spotifyNotConnectedLabel,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ?: if (isConnecting) concept.spotifyConnectingLabel else concept.spotifyNotConnectedLabel,
+                    color = if (isConnecting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )
