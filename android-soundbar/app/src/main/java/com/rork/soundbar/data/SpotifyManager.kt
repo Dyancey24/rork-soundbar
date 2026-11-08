@@ -331,6 +331,24 @@ class SpotifyManager private constructor(context: Context) {
         return ids.firstOrNull { it.second }?.first ?: ids.firstOrNull()?.first
     }
 
+    /**
+     * Matches a shelf of tracks to Spotify URIs, in pour order — the shared
+     * resolution behind the Web API pour and the App Remote pour alike.
+     * Returns null only when the search itself was refused.
+     */
+    suspend fun resolveUris(tracks: List<Track>, startIndex: Int = 0): List<String>? {
+        val token = accessToken() ?: return null
+        val uris = mutableListOf<String>()
+        for ((index, track) in tracks.withIndex()) {
+            // The blend pours from the chosen starting song on — earlier
+            // songs stay behind, so the dish starts where it was asked.
+            if (index < startIndex) continue
+            val uri = resolveUri(token, track)
+            if (uri != null) uris.add(uri)
+        }
+        return uris
+    }
+
     /** Matches a shelf track to its Spotify URI by title and artist search. */
     private suspend fun resolveUri(token: String, track: Track): String? {
         val key = "${track.title}|${track.artist}"

@@ -1,6 +1,11 @@
 package com.rork.soundbar.ui
 
 import android.app.Application
+import android.app.SearchManager
+import android.content.Intent
+import android.net.Uri
+import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,6 +22,7 @@ import com.rork.soundbar.data.GenreCatalog
 import com.rork.soundbar.data.GuestCard
 import com.rork.soundbar.data.GuestExchange
 import com.rork.soundbar.data.Ingredient
+import com.rork.soundbar.data.LiveTrack
 import com.rork.soundbar.data.LeaderboardData
 import com.rork.soundbar.data.LeaderboardSync
 import com.rork.soundbar.data.Profile
@@ -28,6 +34,7 @@ import com.rork.soundbar.data.SignatureCraft
 import com.rork.soundbar.data.SpotifyConnection
 import com.rork.soundbar.data.SpotifyManager
 import com.rork.soundbar.data.SpotifyQueueResult
+import com.rork.soundbar.data.SpotifyRemote
 import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.data.Track
 import com.rork.soundbar.data.TrackLibrary
@@ -38,13 +45,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.TimeZone
+import kotlin.coroutines.resume
 
 /** What the simulated bar player is currently pouring through the speakers. */
 data class Playback(
@@ -128,15 +141,29 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private val _uiState = MutableStateFlow(SoundbarUiState())
     val uiState: StateFlow<SoundbarUiState> = _uiState.asStateFlow()
 
+    /**
+     * The song Spotify's own player is pouring right now — real title,
+     * artist, artwork and progress — shown on the Now Pouring bar while it
+     * belongs to the blend in play. Null when nothing real is pouring for it.
+     */
+    val liveNow: StateFlow<LiveTrack?> by lazy {
+        combine(_uiState, spotifyRemote.live) { state, live -> liveFor(state, live) }
+            .stateIn(syncScope, SharingStarted.Eagerly, null)
+    }
+
     private var mixDays: List<Long> = emptyList()
     private var tickerJob: Job? = null
 
     /** The Spotify pour in flight, cancelled whenever a newer play arrives. */
     private var pourJob: Job? = null
 
-    /** A play pressed before Spotify was connected, poured once it is. */
+    /** The conductor's door into the Spotify app on this very phone. */
+    private val spotifyRemote: SpotifyRemote by lazy { SpotifyRemote.get(getApplication()) }
+
+    /** The blend last poured through the phone's own Spotify, whose real
+     * song is safe to show even when its title isn't in the blend anymore. */
     @Volatile
-    private var pendingPour: Pair<Blend, Int>? = null
+    private var remoteBlendId: String? = null
     private var noteSaveJob: Job? = null
     private var profilePushJob: Job? = null
     private var exchange: GuestExchange? = null
@@ -191,24 +218,59 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                     connection is SpotifyConnection.Connected &&
                         previous is SpotifyConnection.Connecting -> {
                         toast(concept.spotifyJustConnectedMessage(connection.displayName))
-                        pendingPour?.let { (blend, index) ->
-                            pendingPour = null
-                            withContext(Dispatchers.Main) { playBlend(blend, index) }
-                        }
+                        // The conductor's door opens with the account's: the
+                        // next pour plays on this phone without leaving the house.
+                        spotifyRemote.whenConnected(onReady = {})
                     }
                     connection is SpotifyConnection.Failed -> {
-                        pendingPour = null
                         toast(connection.message)
                         spotifyManager.acknowledgeFailure()
                     }
                     connection is SpotifyConnection.Disconnected &&
                         previous is SpotifyConnection.Connecting -> {
-                        pendingPour = null
                         toast(concept.spotifyConnectCancelledMessage)
                     }
                 }
                 previous = connection
             }
+        }
+
+        // Spotify's real player answers back: when it moves to a song the
+        // blend knows, the house's needle follows it, and a pause or resume
+        // made outside the app is honoured here too.
+        syncScope.launch {
+            spotifyRemote.live.collect { current ->
+                if (current == null) return@collect
+                val state = _uiState.value
+                val playback = state.playback ?: return@collect
+                val blend = findBlendIn(state, playback.blendId) ?: return@collect
+                val match = blend.tracks.indexOfFirst {
+                    it.title.equals(current.title, ignoreCase = true)
+                }
+                val newIndex = if (match >= 0) match else playback.trackIndex
+                var playing = playback.isPlaying
+                if (newIndex == playback.trackIndex && current.isPlaying != playing) {
+                    playing = current.isPlaying
+                    if (playing) startTicker() else tickerJob?.cancel()
+                }
+                if (newIndex != playback.trackIndex || playing != playback.isPlaying) {
+                    _uiState.update {
+                        it.copy(
+                            playback = playback.copy(
+                                trackIndex = newIndex,
+                                isPlaying = playing,
+                                positionSeconds = if (newIndex != playback.trackIndex) 0 else playback.positionSeconds
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // A house that opens already connected gets its conductor warmed up
+        // right away, so the first play press is heard without a wait.
+        if (spotifyManager.state.value is SpotifyConnection.Connected) {
+            spotifyRemote.whenConnected(onReady = {})
         }
     }
 
@@ -668,12 +730,27 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     // region shelf
 
-    fun findBlend(id: String): Blend? {
-        val concept = _uiState.value.concept
-        val stored = _uiState.value.servedBlends.firstOrNull { it.id == id }
-            ?: _uiState.value.shelf.firstOrNull { it.id == id }
-            ?: _uiState.value.guests.firstOrNull { it.blend.id == id }?.blend
-        return if (stored != null) BlendBar.adapt(stored, concept) else BlendBar.findHouseBlend(id, concept)
+    fun findBlend(id: String): Blend? = findBlendIn(_uiState.value, id)
+
+    private fun findBlendIn(state: SoundbarUiState, id: String): Blend? {
+        val stored = state.servedBlends.firstOrNull { it.id == id }
+            ?: state.shelf.firstOrNull { it.id == id }
+            ?: state.guests.firstOrNull { it.blend.id == id }?.blend
+        return if (stored != null) BlendBar.adapt(stored, state.concept) else BlendBar.findHouseBlend(id, state.concept)
+    }
+
+    /**
+     * The real song now pouring, when it belongs to the blend in play: either
+     * it is a track the blend knows, or the blend was poured through the
+     * phone's Spotify and has simply run past its own list. Anything else — a
+     * stray session from before, music another app started — stays hidden.
+     */
+    private fun liveFor(state: SoundbarUiState, live: LiveTrack?): LiveTrack? {
+        if (live == null) return null
+        val playback = state.playback ?: return null
+        val blend = findBlendIn(state, playback.blendId) ?: return null
+        val inBlend = blend.tracks.any { it.title.equals(live.title, ignoreCase = true) }
+        return if (inBlend || playback.blendId == remoteBlendId) live else null
     }
 
     fun isOnShelf(id: String): Boolean = _uiState.value.shelf.any { it.id == id }
@@ -837,14 +914,6 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     fun playBlend(blend: Blend, trackIndex: Int = 0) {
         if (blend.tracks.isEmpty()) return
-        // Play means real music, so an unconnected house walks the reader
-        // through connecting first; the asked-for blend waits and pours the
-        // moment the connection lands.
-        if (_uiState.value.spotify !is SpotifyConnection.Connected) {
-            pendingPour = blend to trackIndex
-            connectSpotify()
-            return
-        }
         val startIndex = cleanStartIndex(blend, trackIndex)
         _uiState.update { state ->
             state.copy(
@@ -860,9 +929,17 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         persist()
         startTicker()
         refreshSignature()
-        // The blend pours in Spotify's own player on the reader's active
-        // device, replacing whatever was pouring before.
-        pourNow(blend, startIndex)
+        if (_uiState.value.spotify is SpotifyConnection.Connected) {
+            // The blend pours through the Spotify app on this very phone —
+            // the reader stays in the house while the music starts — with
+            // the Web API pour (Spotify awake on any device) as the fallback.
+            pourNow(blend, startIndex)
+        } else {
+            // No account connected: Spotify itself is asked to start the
+            // exact song right now, the way a voice assistant would. No
+            // browser, no search page, no sign-in — play just plays.
+            playExternalNow(blend, startIndex)
+        }
     }
 
     fun togglePlayPause() {
@@ -870,9 +947,15 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val resume = !playback.isPlaying
         _uiState.update { it.copy(playback = playback.copy(isPlaying = resume)) }
         if (resume) startTicker() else tickerJob?.cancel()
-        // The real player follows the house's pause and resume.
+        // The real player follows the house's pause and resume — through the
+        // phone's Spotify when the conductor's door is open, through the
+        // Web API when the music lives on another awake device.
         if (_uiState.value.spotify is SpotifyConnection.Connected) {
-            syncScope.launch { spotifyManager.setPlaying(resume) }
+            if (spotifyRemote.isConnected) {
+                if (resume) spotifyRemote.resume() else spotifyRemote.pause()
+            } else {
+                syncScope.launch { spotifyManager.setPlaying(resume) }
+            }
         }
     }
 
@@ -882,6 +965,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val next = neighbourIndex(blend, playback.trackIndex, step = 1)
         _uiState.update { it.copy(playback = playback.copy(trackIndex = next, positionSeconds = 0, isPlaying = true)) }
         startTicker()
+        if (spotifyRemote.isConnected) spotifyRemote.skipNext()
     }
 
     fun skipToPrevious() {
@@ -889,11 +973,13 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         val blend = findBlend(playback.blendId) ?: return
         if (playback.positionSeconds > 4) {
             _uiState.update { it.copy(playback = playback.copy(positionSeconds = 0)) }
+            if (spotifyRemote.isConnected) spotifyRemote.skipPrevious()
             return
         }
         val previous = neighbourIndex(blend, playback.trackIndex, step = -1)
         _uiState.update { it.copy(playback = playback.copy(trackIndex = previous, positionSeconds = 0, isPlaying = true)) }
         startTicker()
+        if (spotifyRemote.isConnected) spotifyRemote.skipPrevious()
     }
 
     /**
@@ -917,15 +1003,43 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Hands the blend to the user's chosen streaming house — once per play,
-     * never on skips or pauses, so the platform's own queue carries the music
-     * on without the reader being pulled back and forth. Says where it went.
+     * The quick pour, for a house with no connected account: Spotify itself
+     * is asked to start the exact song right now — the same request a voice
+     * assistant makes. The song starts with no browser and no search page;
+     * the reader comes back with a single back gesture, and a toast points
+     * the way. Spotify not installed at all? The store page is one tap away.
      */
-    private fun launchExternal(blend: Blend, trackIndex: Int) {
-        val platform = _uiState.value.selectedPlatform
-        platform.launch(getApplication(), blend, trackIndex)
-        val verb = if (_uiState.value.concept == Concept.BAR) "Now pouring in" else "Now playing in"
-        Toast.makeText(getApplication(), "$verb ${platform.displayName}", Toast.LENGTH_SHORT).show()
+    private fun playExternalNow(blend: Blend, startIndex: Int) {
+        val context = getApplication<Application>()
+        val track = blend.tracks.getOrNull(startIndex) ?: return
+        val query = "${track.artist} ${track.title}"
+        try {
+            context.startActivity(
+                Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                    .setPackage(SPOTIFY_PACKAGE)
+                    .putExtra(SearchManager.QUERY, query)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (error: Exception) {
+            try {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:${Uri.encode(query)}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (inner: Exception) {
+                try {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(SPOTIFY_STORE_URL))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (last: Exception) {
+                    Log.w(TAG, "Could not open Spotify or its store page")
+                }
+                Toast.makeText(context, _uiState.value.concept.spotifyMissingMessage, Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+        Toast.makeText(context, _uiState.value.concept.nowPouringExternalMessage("Spotify"), Toast.LENGTH_SHORT).show()
     }
 
     /** Offers the Premium heads-up before Spotify's consent screen opens. */
@@ -942,7 +1056,6 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
 
     /** The reader stepped back from the door. */
     fun dismissSpotifyPrompt() {
-        pendingPour = null
         _uiState.update { it.copy(isSpotifyPromptVisible = false) }
     }
 
@@ -966,7 +1079,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     /**
      * Lines the blend up in Spotify's real player and says where it went —
      * the shared pour behind the dish screen's queue button and every play
-     * press when Spotify is connected.
+     * press when Spotify is connected. The phone's own Spotify is tried
+     * first, so the music starts while the reader stays in the house.
      */
     private fun pourNow(blend: Blend, startIndex: Int) {
         // The newest press always wins: any pour still in flight is called
@@ -976,7 +1090,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         lateinit var job: Job
         job = syncScope.launch(start = CoroutineStart.LAZY) {
             val outcome = try {
-                spotifyManager.queueAndPlay(blend.tracks, startIndex)
+                pourThroughSpotify(blend, startIndex)
             } finally {
                 if (pourJob === job) _uiState.update { it.copy(isPouring = false) }
             }
@@ -995,6 +1109,38 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         pourJob = job
         job.start()
     }
+
+    /**
+     * The pour, heard immediately: first through the Spotify app on this
+     * phone (the music plays while the reader stays put), then through the
+     * Web API — which reaches whatever device Spotify is awake on.
+     */
+    private suspend fun pourThroughSpotify(blend: Blend, startIndex: Int): SpotifyQueueResult {
+        val uris = spotifyManager.resolveUris(blend.tracks, startIndex)
+        if (!uris.isNullOrEmpty()) {
+            val played = withTimeoutOrNull(REMOTE_CONNECT_TIMEOUT_MILLIS) { playViaRemote(uris) }
+            if (played == true) {
+                remoteBlendId = blend.id
+                return SpotifyQueueResult.QUEUED
+            }
+        }
+        return spotifyManager.queueAndPlay(blend.tracks, startIndex)
+    }
+
+    /** The phone's Spotify, asked to play; null when it couldn't answer. */
+    private suspend fun playViaRemote(uris: List<String>): Boolean? =
+        suspendCancellableCoroutine { cont ->
+            spotifyRemote.whenConnected(
+                onReady = {
+                    spotifyRemote.play(uris) { played ->
+                        if (cont.isActive) cont.resume(played, null)
+                    }
+                },
+                onError = {
+                    if (cont.isActive) cont.resume(null, null)
+                }
+            )
+        }
 
     fun stopPlayback() {
         tickerJob?.cancel()
@@ -1208,6 +1354,7 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     }
 
     private companion object {
+        private const val TAG = "SoundbarViewModel"
         const val MAX_INGREDIENTS = 4
         const val MAX_PARTS = 4
         const val SHAKE_MILLIS = 850L
@@ -1216,6 +1363,11 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         const val SYNC_DEBOUNCE_MILLIS = 3000L
         const val MAX_USERNAME = 24
         const val PROFILE_PUSH_DEBOUNCE_MILLIS = 2000L
+        const val SPOTIFY_PACKAGE = "com.spotify.music"
+        const val SPOTIFY_STORE_URL = "https://play.google.com/store/apps/details?id=com.spotify.music"
+
+        /** How long the phone's Spotify gets to answer the door mid-pour. */
+        const val REMOTE_CONNECT_TIMEOUT_MILLIS = 8000L
 
         /** Local calendar day index, kept free of java.time so minSdk 24 stays happy. */
         fun today(): Long {

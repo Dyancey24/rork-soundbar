@@ -207,6 +207,17 @@ enum class Concept(val id: String) {
     val spotifyPremiumContinueLabel: String get() = "Continue to Spotify"
     val spotifyPremiumCancelLabel: String get() = "Not now"
 
+    /** Spotify poured the music and sent the reader back — the way home is one gesture. */
+    fun nowPouringExternalMessage(platform: String): String =
+        if (this == BAR) "Now pouring in $platform — see you back at the bar."
+        else "Now playing in $platform — see you back at the counter."
+    val spotifyMissingMessage: String
+        get() = if (this == BAR) {
+            "Spotify isn't on this phone — its store page can fix that."
+        } else {
+            "Spotify isn't on this phone — its store page can fix that."
+        }
+
     /** The clean filter: offered in settings, on the menu, and on the shelf. */
     val cleanFilterTitle: String get() = "Clean listening"
     val cleanFilterHint: String

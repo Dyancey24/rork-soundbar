@@ -69,5 +69,10 @@ dependencies {
     implementation(libs.play.services.nearby)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.security.crypto)
+    // Spotify App Remote: conducts the Spotify app on this very phone —
+    // start, pause, skip, and read what's playing — while the reader stays
+    // in Soundbar. Distributed as an AAR, not on Maven.
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    implementation(libs.gson)
     debugImplementation(libs.androidx.ui.tooling)
 }

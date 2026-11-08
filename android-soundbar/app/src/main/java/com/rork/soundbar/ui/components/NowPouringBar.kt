@@ -35,11 +35,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rork.soundbar.data.Blend
+import com.rork.soundbar.data.LiveTrack
 import com.rork.soundbar.data.Track
 
 /**
  * The slim bar that sits directly above the tab bar whenever something is pouring.
  * It carries the blend artwork, the current track, and a fine gold progress hairline.
+ * When Spotify's own player is pouring on this phone, [live] carries the real
+ * song — its title, its cover, its true progress — and takes the stage.
  */
 @Composable
 fun NowPouringBar(
@@ -51,10 +54,23 @@ fun NowPouringBar(
     onOpen: () -> Unit,
     onTogglePlay: () -> Unit,
     onSkip: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    live: LiveTrack? = null
 ) {
+    val shownTitle = live?.title?.takeIf { it.isNotBlank() } ?: track.title
+    val shownSubtitle = if (live != null) {
+        "$platformName · ${live.artist}".trimEnd('·', ' ')
+    } else {
+        "$platformName · ${track.artist} · ${blend.name}"
+    }
+    val shownIsPlaying = live?.isPlaying ?: isPlaying
+    val shownProgress = if (live != null && live.durationMs > 0) {
+        live.positionNowMs().toFloat() / live.durationMs.toFloat()
+    } else {
+        progress
+    }
     val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
+        targetValue = shownProgress.coerceIn(0f, 1f),
         animationSpec = tween(900),
         label = "trackProgress"
     )
@@ -86,7 +102,7 @@ fun NowPouringBar(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 BlendArtwork(
-                    imageUrl = blend.imageUrl,
+                    imageUrl = live?.artworkUrl ?: blend.imageUrl,
                     scrim = false,
                     modifier = Modifier
                         .size(42.dp)
@@ -94,7 +110,7 @@ fun NowPouringBar(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = track.title,
+                        text = shownTitle,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
@@ -102,21 +118,21 @@ fun NowPouringBar(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "$platformName · ${track.artist} · ${blend.name}",
+                        text = shownSubtitle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (isPlaying) {
+                if (shownIsPlaying) {
                     NowPouringBars()
                 }
                 PourButton(
                     onClick = onTogglePlay,
-                    isPlaying = isPlaying,
+                    isPlaying = shownIsPlaying,
                     size = 38,
-                    contentDescription = if (isPlaying) "Pause" else "Resume"
+                    contentDescription = if (shownIsPlaying) "Pause" else "Resume"
                 )
                 IconButton(onClick = onSkip) {
                     Icon(

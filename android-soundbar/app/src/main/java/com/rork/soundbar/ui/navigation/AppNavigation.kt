@@ -192,6 +192,9 @@ private fun AppShell(
     val playback = state.playback
     val playingBlend = playback?.let { viewModel.findBlend(it.blendId) }
     val playingTrack = playingBlend?.tracks?.getOrNull(playback.trackIndex)
+    // The real song Spotify's own player is pouring on this phone, when it
+    // belongs to the blend in play — the bar wears its title and cover.
+    val liveNow by viewModel.liveNow.collectAsStateWithLifecycle()
 
     fun openDish(blendId: String) {
         navController.navigate("dish/$blendId")
@@ -230,7 +233,8 @@ private fun AppShell(
                                         playingTrack.seconds.coerceAtLeast(1).toFloat(),
                                     onOpen = { openDish(playingBlend.id) },
                                     onTogglePlay = viewModel::togglePlayPause,
-                                    onSkip = viewModel::skipToNext
+                                    onSkip = viewModel::skipToNext,
+                                    live = liveNow
                                 )
                             }
                         }
