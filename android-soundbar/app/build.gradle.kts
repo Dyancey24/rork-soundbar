@@ -17,6 +17,19 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        // Spotify's dashboard trusts Soundbar by signing fingerprint, so the
+        // debug key must never drift with whatever machine builds the app —
+        // a committed keystore (standard debug credentials) keeps the
+        // fingerprint the same everywhere.
+        getByName("debug") {
+            storeFile = file("soundbar-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
