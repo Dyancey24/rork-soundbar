@@ -11,9 +11,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -210,7 +212,10 @@ private fun AppShell(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (onTab) {
-                Column {
+                // One navigation-bar inset for the whole bottom chrome — the
+                // Now Pouring bar, the shake button, and the tabs all sit
+                // above the phone's navigation buttons, never beneath them.
+                Column(modifier = Modifier.navigationBarsPadding()) {
                     if (currentRoute == "mix") {
                         ShakeBar(
                             enabled = !state.isShaking,
@@ -507,7 +512,9 @@ private fun BarTabs(
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        tonalElevation = 0.dp
+        tonalElevation = 0.dp,
+        // The shell's column already carries the navigation-bar inset.
+        windowInsets = WindowInsets(0, 0, 0, 0)
     ) {
         val backStackEntry by navController.currentBackStackEntryAsState()
         tabsFor(concept).forEach { tab ->

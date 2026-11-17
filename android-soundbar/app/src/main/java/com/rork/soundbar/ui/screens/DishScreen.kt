@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -458,7 +459,12 @@ private fun DishActionBar(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            // The phone's navigation buttons share the bottom edge — the
+            // action bar lifts itself above them so play and queue stay
+            // reachable, and content keeps scrolling beneath the clear bar.
+            .navigationBarsPadding(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column {
