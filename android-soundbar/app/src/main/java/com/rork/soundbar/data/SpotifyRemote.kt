@@ -1,13 +1,17 @@
 package com.rork.soundbar.data
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.spotify.android.appremote.api.ConnectionParams
 import com.spotify.android.appremote.api.Connector
 import com.spotify.android.appremote.api.SpotifyAppRemote
 import com.spotify.protocol.types.PlayerState
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +52,12 @@ data class LiveTrack(
 class SpotifyRemote private constructor(context: Context) {
 
     private val appContext = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> Log.w(TAG, "Remote background error", e) }
+    )
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var heartbeat: Job? = null
     private val _live = MutableStateFlow<LiveTrack?>(null)
     val live: StateFlow<LiveTrack?> = _live.asStateFlow()
 
@@ -77,13 +86,26 @@ class SpotifyRemote private constructor(context: Context) {
             onReady()
             return
         }
-        if (!isSpotifyInstalled()) {
+        val installed = try {
+            isSpotifyInstalled()
+        } catch (e: Exception) {
+            false
+        }
+        if (!installed) {
             onError()
             return
         }
         synchronized(waiting) { waiting.add(onReady) }
         synchronized(failing) { failing.add(onError) }
         if (connecting.compareAndSet(false, true)) {
+            // The SDK builds an android.os.Handler on the calling thread, so it
+            // must be the main looper — a background thread crashes the app.
+            mainHandler.post { connectOnMain() }
+        }
+    }
+
+    private fun connectOnMain() {
+        try {
             val params = ConnectionParams.Builder(SpotifyConfig.CLIENT_ID)
                 .setRedirectUri(SpotifyConfig.REDIRECT_URI)
                 .build()
@@ -93,15 +115,23 @@ class SpotifyRemote private constructor(context: Context) {
                     connecting.set(false)
                     watchPlayer(connected)
                     flush(waiting)
+                    synchronized(failing) { failing.clear() }
                 }
 
                 override fun onFailure(error: Throwable) {
                     Log.w(TAG, "App Remote connection failed: ${error.message}")
                     connecting.set(false)
                     remote = null
+                    synchronized(waiting) { waiting.clear() }
                     flush(failing)
                 }
             })
+        } catch (e: Exception) {
+            Log.w(TAG, "App Remote connect threw", e)
+            connecting.set(false)
+            remote = null
+            synchronized(waiting) { waiting.clear() }
+            flush(failing)
         }
     }
 
@@ -111,30 +141,54 @@ class SpotifyRemote private constructor(context: Context) {
             queue.clear()
             list
         }
-        toRun.forEach { it() }
+        toRun.forEach {
+            try {
+                it()
+            } catch (e: Exception) {
+                Log.w(TAG, "Callback failed", e)
+            }
+        }
     }
 
     /** Streams the player state into [live], and keeps the needle honest between reports. */
     private fun watchPlayer(appRemote: SpotifyAppRemote) {
-        appRemote.playerApi.subscribeToPlayerState().apply {
-            setEventCallback { state ->
-                _live.value = state.toLive()
-                scope.launch {
-                    // Spotify reports only on changes; a one-second heartbeat
-                    // walks the progress line until the next report arrives.
-                    while (isActive && remote?.isConnected == true) {
-                        delay(1000)
-                        val current = _live.value ?: break
-                        if (current.isPlaying) {
-                            _live.value = current.copy(positionMs = current.positionNowMs())
-                        }
+        try {
+            appRemote.playerApi.subscribeToPlayerState().apply {
+                setEventCallback { state ->
+                    val live = try {
+                        state?.toLive()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Dropped a player update", e)
+                        return@setEventCallback
                     }
+                    _live.value = live
+                    startHeartbeat()
+                }
+                setErrorCallback { error ->
+                    Log.w(TAG, "Player watch ended: ${error?.message}")
+                    remote = null
+                    _live.value = null
+                    heartbeat?.cancel()
                 }
             }
-            setErrorCallback { error ->
-                Log.w(TAG, "Player watch ended: ${error?.message}")
-                remote = null
-                _live.value = null
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not watch the player", e)
+        }
+    }
+
+    /** Spotify reports only on changes; one heartbeat walks the progress line between reports. */
+    private fun startHeartbeat() {
+        if (heartbeat?.isActive == true) return
+        heartbeat = scope.launch {
+            while (isActive && remote?.isConnected == true) {
+                delay(1000)
+                val current = _live.value ?: break
+                if (current.isPlaying) {
+                    _live.value = current.copy(
+                        positionMs = current.positionNowMs(),
+                        readAtMillis = System.currentTimeMillis()
+                    )
+                }
             }
         }
     }
@@ -175,29 +229,40 @@ class SpotifyRemote private constructor(context: Context) {
             onDone(false)
             return
         }
-        playerApi.play(first).setResultCallback({
-            uris.drop(1).forEach { playerApi.queue(it) }
-            onDone(true)
-        }).setErrorCallback {
-            onDone(false)
+        val answered = AtomicBoolean(false)
+        val reply: (Boolean) -> Unit = { ok -> if (answered.compareAndSet(false, true)) onDone(ok) }
+        try {
+            playerApi.play(first).setResultCallback({
+                try {
+                    uris.drop(1).forEach { playerApi.queue(it) }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Queueing the rest failed", e)
+                }
+                reply(true)
+            }).setErrorCallback {
+                reply(false)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote play threw", e)
+            reply(false)
         }
     }
 
-    fun resume() {
-        remote?.playerApi?.resume()
+    private inline fun safely(action: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            Log.w(TAG, "Remote $action failed", e)
+        }
     }
 
-    fun pause() {
-        remote?.playerApi?.pause()
-    }
+    fun resume() = safely("resume") { remote?.playerApi?.resume() }
 
-    fun skipNext() {
-        remote?.playerApi?.skipNext()
-    }
+    fun pause() = safely("pause") { remote?.playerApi?.pause() }
 
-    fun skipPrevious() {
-        remote?.playerApi?.skipPrevious()
-    }
+    fun skipNext() = safely("skipNext") { remote?.playerApi?.skipNext() }
+
+    fun skipPrevious() = safely("skipPrevious") { remote?.playerApi?.skipPrevious() }
 
     // endregion
 

@@ -337,7 +337,13 @@ class SpotifyManager private constructor(context: Context) {
      * Returns null only when the search itself was refused.
      */
     suspend fun resolveUris(tracks: List<Track>, startIndex: Int = 0): List<String>? {
-        val token = accessToken() ?: return null
+        val token = try {
+            accessToken()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } ?: return null
         val uris = mutableListOf<String>()
         for ((index, track) in tracks.withIndex()) {
             // The blend pours from the chosen starting song on — earlier
@@ -350,7 +356,16 @@ class SpotifyManager private constructor(context: Context) {
     }
 
     /** Matches a shelf track to its Spotify URI by title and artist search. */
-    private suspend fun resolveUri(token: String, track: Track): String? {
+    private suspend fun resolveUri(token: String, track: Track): String? = try {
+        resolveUriUnsafe(token, track)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        android.util.Log.w("SpotifyManager", "Track lookup failed", e)
+        null
+    }
+
+    private suspend fun resolveUriUnsafe(token: String, track: Track): String? {
         val key = "${track.title}|${track.artist}"
         uriCache[key]?.let { return it }
 

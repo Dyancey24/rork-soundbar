@@ -39,6 +39,8 @@ import com.rork.soundbar.data.StreamingPlatform
 import com.rork.soundbar.data.Track
 import com.rork.soundbar.data.TrackLibrary
 import com.rork.soundbar.ui.theme.Concept
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -172,7 +174,12 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private val cloudSync: CloudSync by lazy { CloudSync(auth) }
     private val leaderboardSync: LeaderboardSync by lazy { LeaderboardSync(auth) }
     private val spotifyManager: SpotifyManager by lazy { SpotifyManager.get(getApplication()) }
-    private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val syncScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e ->
+                android.util.Log.w("SoundbarViewModel", "Background task failed", e)
+            }
+    )
     private var syncJob: Job? = null
     private var hasSynced = false
 
@@ -1091,6 +1098,11 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         job = syncScope.launch(start = CoroutineStart.LAZY) {
             val outcome = try {
                 pourThroughSpotify(blend, startIndex)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("SoundbarViewModel", "Pour failed", e)
+                SpotifyQueueResult.FAILED
             } finally {
                 if (pourJob === job) _uiState.update { it.copy(isPouring = false) }
             }
@@ -1130,7 +1142,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     /** The phone's Spotify, asked to play; null when it couldn't answer. */
     private suspend fun playViaRemote(uris: List<String>): Boolean? =
         suspendCancellableCoroutine { cont ->
-            spotifyRemote.whenConnected(
+            try {
+                spotifyRemote.whenConnected(
                 onReady = {
                     spotifyRemote.play(uris) { played ->
                         if (cont.isActive) cont.resume(played, null)
@@ -1139,7 +1152,10 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
                 onError = {
                     if (cont.isActive) cont.resume(null, null)
                 }
-            )
+                )
+            } catch (e: Exception) {
+                if (cont.isActive) cont.resume(null, null)
+            }
         }
 
     fun stopPlayback() {
