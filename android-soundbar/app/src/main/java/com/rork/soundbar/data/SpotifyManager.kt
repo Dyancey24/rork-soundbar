@@ -314,7 +314,7 @@ class SpotifyManager private constructor(context: Context) {
         }
     }
 
-    /** A device Spotify is already playing on, else any awake device. */
+    /** A device Spotify is already playing on, else this phone, else any awake device. */
     private suspend fun awakeDevice(token: String): String? {
         val response = http.get("${SpotifyConfig.API_URL}/v1/me/player/devices") {
             header(HttpHeaders.Authorization, "Bearer $token")
@@ -326,9 +326,12 @@ class SpotifyManager private constructor(context: Context) {
             val entry = device.jsonObject
             val id = entry["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
             val isActive = entry["is_active"]?.jsonPrimitive?.contentOrNull == "true"
-            id to isActive
+            val isPhone = entry["type"]?.jsonPrimitive?.contentOrNull.equals("Smartphone", ignoreCase = true)
+            Triple(id, isActive, isPhone)
         }
-        return ids.firstOrNull { it.second }?.first ?: ids.firstOrNull()?.first
+        return ids.firstOrNull { it.second }?.first
+            ?: ids.firstOrNull { it.third }?.first
+            ?: ids.firstOrNull()?.first
     }
 
     /**

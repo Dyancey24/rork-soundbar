@@ -1130,31 +1130,39 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
     private suspend fun pourThroughSpotify(blend: Blend, startIndex: Int): SpotifyQueueResult {
         val uris = spotifyManager.resolveUris(blend.tracks, startIndex)
         if (!uris.isNullOrEmpty()) {
-            val played = withTimeoutOrNull(REMOTE_CONNECT_TIMEOUT_MILLIS) { playViaRemote(uris) }
-            if (played == true) {
-                remoteBlendId = blend.id
-                return SpotifyQueueResult.QUEUED
+            val connected = withTimeoutOrNull(REMOTE_CONNECT_TIMEOUT_MILLIS) { connectRemote() } == true
+            if (connected) {
+                // Once the phone's Spotify has the order, the music stays on this
+                // phone: a slow answer is never followed by a second Web API pour,
+                // which could hand the sound to another device on the account.
+                val played = withTimeoutOrNull(REMOTE_PLAY_TIMEOUT_MILLIS) { playOnRemote(uris) }
+                if (played != false) {
+                    remoteBlendId = blend.id
+                    return SpotifyQueueResult.QUEUED
+                }
             }
         }
         return spotifyManager.queueAndPlay(blend.tracks, startIndex)
     }
 
-    /** The phone's Spotify, asked to play; null when it couldn't answer. */
-    private suspend fun playViaRemote(uris: List<String>): Boolean? =
+    /** Opens the door to the phone's Spotify; false when it stays shut. */
+    private suspend fun connectRemote(): Boolean =
         suspendCancellableCoroutine { cont ->
             try {
                 spotifyRemote.whenConnected(
-                onReady = {
-                    spotifyRemote.play(uris) { played ->
-                        if (cont.isActive) cont.resume(played, null)
-                    }
-                },
-                onError = {
-                    if (cont.isActive) cont.resume(null, null)
-                }
+                    onReady = { if (cont.isActive) cont.resume(true, null) },
+                    onError = { if (cont.isActive) cont.resume(false, null) }
                 )
             } catch (e: Exception) {
-                if (cont.isActive) cont.resume(null, null)
+                if (cont.isActive) cont.resume(false, null)
+            }
+        }
+
+    /** The phone's Spotify, asked to play; false only on an explicit refusal. */
+    private suspend fun playOnRemote(uris: List<String>): Boolean =
+        suspendCancellableCoroutine { cont ->
+            spotifyRemote.play(uris) { played ->
+                if (cont.isActive) cont.resume(played, null)
             }
         }
 
@@ -1383,7 +1391,8 @@ class SoundbarViewModel(application: Application) : AndroidViewModel(application
         const val SPOTIFY_STORE_URL = "https://play.google.com/store/apps/details?id=com.spotify.music"
 
         /** How long the phone's Spotify gets to answer the door mid-pour. */
-        const val REMOTE_CONNECT_TIMEOUT_MILLIS = 8000L
+        const val REMOTE_CONNECT_TIMEOUT_MILLIS = 12000L
+        const val REMOTE_PLAY_TIMEOUT_MILLIS = 10000L
 
         /** Local calendar day index, kept free of java.time so minSdk 24 stays happy. */
         fun today(): Long {
